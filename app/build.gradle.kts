@@ -31,7 +31,22 @@ android {
         buildConfigField("String", "TMDB_API_KEY", "\"${tmdbKey.replace("\"", "")}\"")
     }
 
+    // Optional stable key for debug builds (CI restores it from a secret): without one every build gets a fresh
+    // debug key, and the TV refuses to update the installed copy.
+    val personalKeystore = System.getenv("GLASSOS_DEBUG_KEYSTORE")
+    if (!personalKeystore.isNullOrEmpty()) {
+        signingConfigs.create("personal") {
+            storeFile = file(personalKeystore)
+            storePassword = System.getenv("GLASSOS_DEBUG_PASSWORD")
+            keyAlias = "glassos-personal"
+            keyPassword = System.getenv("GLASSOS_DEBUG_PASSWORD")
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfigs.findByName("personal")?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
