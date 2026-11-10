@@ -133,6 +133,12 @@ class MainActivity : Activity(), HomeHost {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() = home.onBack()
 
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == HomeScreen.REQ_UNINSTALL) home.onUninstallResult(resultCode)
+    }
+
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         if (intent?.getBooleanExtra("continuePermission", false) == true) { home.requestContinuePermission(); return }

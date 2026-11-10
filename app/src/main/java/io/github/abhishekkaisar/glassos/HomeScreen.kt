@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.ActivityOptions
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
@@ -68,6 +69,8 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
     private lateinit var continueRepo: ContinueWatchingRepository
     private lateinit var shelf: GlassBox
     private lateinit var gear: UserPill
+    private lateinit var uninstallPill: PillButton
+    private lateinit var topBar: LinearLayout
     private lateinit var chevron: View
     private lateinit var hint: TextView
     lateinit var settings: SettingsView
@@ -79,6 +82,18 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
     lateinit var appMenu: AppMenu
         private set
     private lateinit var movePill: GlassBox
+    private lateinit var moveHint: TextView
+
+    /** Select mode: OK marks an app for uninstall; the top button, Menu or Play/Pause uninstalls the marked apps. */
+    var selectMode = false
+        private set
+    private val selected = LinkedHashSet<String>()
+    /** Apps still to uninstall after [uninstallPending], and the one whose system dialog is open now. */
+    private val uninstallQueue = ArrayList<String>()
+    private var uninstallPending: String? = null
+    /** The window went to the back while a system dialog was pending: without a result by the next resume, it is lost. */
+    private var pausedForUninstall = false
+    private val uninstalling get() = uninstallPending != null || uninstallQueue.isNotEmpty()
 
     private var apps: List<AppEntry> = emptyList()
     private val dockTiles = ArrayList<TileView>()
@@ -123,6 +138,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         if (::root.isInitialized) {
             shelf.invalidate()
             gear.invalidate()
+            uninstallPill.invalidate()
             chevron.invalidate()
             if (scrim.alpha > 0f) scrim.invalidate()
             if (settings.isOpen) invalidateDeep(settings.panel)
@@ -218,7 +234,23 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             onClick = { openControlCenter() }
             onLongPress = { openSettings() }
         }
-        header.addView(gear, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
+        // Multi-select needs the activity's result callback, so the overlay (not an Activity) has no button.
+        uninstallPill = PillButton(ctx).apply {
+            id = View.generateViewId()
+            label = "Uninstall apps"
+            nextFocusDownId = hero.id
+            visibility = if (ctx is Activity) View.VISIBLE else View.GONE
+            onClick = { onUninstallPill() }
+        }
+        topBar = LinearLayout(ctx).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        topBar.addView(uninstallPill, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = ctx.dpi(12f) })
+        topBar.addView(gear, LinearLayout.LayoutParams(-2, -2))
+        header.addView(topBar, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
             rightMargin = margin; topMargin = sh * 48 / 1080
         })
         heroRefresh = HeroRefreshButton(ctx).apply {
@@ -271,7 +303,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             onEnableOrRetry = { requestContinuePermission() }
             setAutoScrollEnabled(prefs.continueAutoScroll)
             canAutoAdvance = { resumed && !released && currentRow in 0..1 && !heroExpanded &&
-                !settings.isOpen && !cc.isOpen && !setup.isOpen && !appMenu.isOpen && !editMode && movingPkg == null }
+                !settings.isOpen && !cc.isOpen && !setup.isOpen && !appMenu.isOpen && !editMode && movingPkg == null && !selectMode }
         }
         continueRepo = ContinueWatchingRepository(ctx) { state ->
             if (!released) continueRow.setState(state)
@@ -302,14 +334,15 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             visibility = View.GONE
             setPadding(ctx.dpi(18f), 0, ctx.dpi(18f), 0)
         }
-        movePill.addView(TextView(ctx).apply {
-            text = "Arrows to move · OK to drop · Menu for options · Back to cancel"
+        moveHint = TextView(ctx).apply {
+            text = MOVE_HINT
             textSize = 14f
             typeface = Fonts.regular
             setTextColor(0xF2FFFFFF.toInt())
             gravity = Gravity.CENTER
             maxLines = 1
-        }, FrameLayout.LayoutParams(-2, -1, Gravity.CENTER))
+        }
+        movePill.addView(moveHint, FrameLayout.LayoutParams(-2, -1, Gravity.CENTER))
         root.addView(movePill, FrameLayout.LayoutParams(-2, pillH, Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
             topMargin = sh * 48 / 1080
         })
@@ -333,7 +366,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
                 val r = (new.tag as? Int) ?: 0
                 if (r == 0) lastDockIndex = dockTiles.indexOf(new).coerceAtLeast(0)
                 scrollToRow(r)
-            } else if (new === gear || new === hero || new === heroRefresh || continueRow.hasFocus()) scrollToRow(0)
+            } else if (new === gear || new === uninstallPill || new === hero || new === heroRefresh || continueRow.hasFocus()) scrollToRow(0)
         }
         root.viewTreeObserver.addOnGlobalLayoutListener { invalidateDeep(root) }
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
@@ -352,7 +385,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
     }
 
     private fun scrollToRow(r: Int) {
-        val titleFocused = focused() === hero || focused() === gear || focused() === heroRefresh
+        val titleFocused = focused() === hero || focused() === gear || focused() === uninstallPill || focused() === heroRefresh
         // Apps stay at the original bottom position. Down reveals Continue Watching;
         // Up returns Apps to the same position without changing the selected app.
         val expanded = r == 0 && !continueRow.hasFocus()
@@ -546,7 +579,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         }
         hero.shelfTop = (row0Top - shelfPadV).toFloat()
         hero.leftX = margin.toFloat()
-        gear.layoutParams = (gear.layoutParams as FrameLayout.LayoutParams).apply { rightMargin = margin }
+        topBar.layoutParams = (topBar.layoutParams as FrameLayout.LayoutParams).apply { rightMargin = margin }
         chevron.layoutParams = (chevron.layoutParams as FrameLayout.LayoutParams).apply { topMargin = row0Top - shelfPadV - ctx.dpi(17f) }
         hint.layoutParams = (hint.layoutParams as FrameLayout.LayoutParams).apply { topMargin = row0Top - ctx.dpi(56f) }
         val instant = FocusAnim.forceInstant
@@ -597,10 +630,16 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
     /** The window went to the back (an app, the screensaver, Settings): a move in progress is put back. */
     fun onPaused() {
         resumed = false
+        if (uninstallPending != null) pausedForUninstall = true
         if (::appMenu.isInitialized) leaveMove()
     }
 
     fun onResumed() {
+        // The system dialog is closed and its result never came (onActivityResult runs before this): give up the queue.
+        if (pausedForUninstall) {
+            pausedForUninstall = false
+            if (uninstallPending != null) { uninstallPending = null; uninstallQueue.clear() }
+        }
         if (layoutKey != prefs.layoutKey) refreshLayout()
         resumed = true
         continueRow.setAutoScrollEnabled(prefs.continueAutoScroll)
@@ -685,6 +724,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         if (movingPkg != null) endMove()
         if (appMenu.isOpen) appMenu.close()
         apps = list
+        if (selectMode && selected.retainAll(list.mapTo(HashSet<String>()) { it.pkg })) updateSelectUi()
         val visible = visibleApps()
         val shown = visible.map { it.pkg }.toSet()
         val wanted = prefs.dock ?: AppRepo.defaultDock(visible, columns)
@@ -725,9 +765,14 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         t.app = app
         t.id = View.generateViewId()
         t.tag = row
+        t.badge = selectMode && app.pkg in selected
         // Read the tile's app at click time: a move swaps apps between tiles in place.
-        t.onClick = { val a = t.app; if (!editMode && a != null) launch(a.pkg, t) }
-        t.onLongPress = { if (!editMode) startMove(t) }
+        t.onClick = {
+            val a = t.app
+            if (selectMode && a != null) toggleSelect(a.pkg)
+            else if (!editMode && a != null) launch(a.pkg, t)
+        }
+        t.onLongPress = { if (!editMode) openOptions(t) }
         return t
     }
 
@@ -897,7 +942,185 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         syncOther()
     }
 
-    // ---------- Move mode (hold OK on an app) ----------
+    // ---------- Uninstall (hold OK on an app, or the top button for several) ----------
+
+    /** System apps with no update to roll back cannot be uninstalled. */
+    private fun canUninstall(pkg: String): Boolean = try {
+        val f = ctx.packageManager.getApplicationInfo(pkg, 0).flags
+        f and ApplicationInfo.FLAG_SYSTEM == 0 || f and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
+    } catch (_: PackageManager.NameNotFoundException) { false }
+
+    private fun isInstalled(pkg: String): Boolean = try { ctx.packageManager.getApplicationInfo(pkg, 0); true }
+        catch (_: PackageManager.NameNotFoundException) { false }
+
+    private fun labelOf(pkg: String) = apps.firstOrNull { it.pkg == pkg }?.label ?: pkg
+
+    /**
+     * Hold OK on a tile: a small menu with Move, Uninstall, Select multiple, the top row toggle and Hide. In select
+     * mode it holds the selection's actions instead.
+     */
+    private fun openOptions(t: TileView) {
+        val app = t.app ?: return
+        if (editMode || movingPkg != null || settings.isOpen || cc.isOpen || setup.isOpen || appMenu.isOpen || uninstalling) return
+        val pkg = app.pkg
+        val items = ArrayList<Pair<String, () -> Unit>>()
+        val heading: String
+        if (selectMode) {
+            heading = "Select apps"
+            val n = selected.size
+            if (n > 0) items.add((if (n == 1) "Uninstall 1 app" else "Uninstall $n apps") to { uninstallSelected() })
+            items.add("Cancel selection" to { exitSelect() })
+        } else {
+            heading = app.label
+            items.add("Move" to { val tile = tileOf(pkg); if (tile != null) startMove(tile) })
+            items.add("Uninstall" to { uninstall(listOf(pkg)) })
+            if (ctx is Activity) items.add("Select multiple to uninstall" to { enterSelect(pkg) })
+            items.add((if (pkg in dockPkgs) "Remove from top row" else "Add to top row") to { toggleDock(pkg) })
+            items.add("Hide app" to { hideApp(pkg) })
+        }
+        // The hold's OK release must not reach the menu's first row.
+        eatOkUp = true
+        blockHome(true)
+        if (selectMode) movePill.visibility = View.INVISIBLE
+        appMenu.open(heading, items) {
+            blockHome(false)
+            if (selectMode) movePill.visibility = View.VISIBLE
+            tileOf(pkg)?.requestFocus()
+            updateHeroRunning()
+        }
+        updateHeroRunning()
+    }
+
+    /** The top button: starts select mode; with apps marked it uninstalls them; with none marked it cancels. */
+    private fun onUninstallPill() {
+        when {
+            uninstalling -> {}
+            !selectMode -> enterSelect(focusApps = true)
+            selected.isEmpty() -> exitSelect()
+            else -> uninstallSelected()
+        }
+    }
+
+    private fun enterSelect(first: String? = null, focusApps: Boolean = false) {
+        if (selectMode || ctx !is Activity || uninstalling) return
+        leaveMove()
+        if (editMode) exitEdit()
+        selectMode = true
+        selected.clear()
+        movePill.animate().cancel()
+        movePill.alpha = 0f
+        movePill.visibility = View.VISIBLE
+        movePill.animate().alpha(1f).setDuration(200).start()
+        if (first != null) toggleSelect(first)
+        updateSelectUi()
+        if (focusApps) focusDock()
+        sound?.takeIf { prefs.sound }?.tick()
+        updateHeroRunning()
+    }
+
+    private fun exitSelect() {
+        if (!selectMode) return
+        selectMode = false
+        selected.clear()
+        for (r in rows) for (t in r) t.badge = false
+        movePill.animate().cancel()
+        movePill.translationY = if (currentRow == 0) 0f else -(sh * 40 / 1080).toFloat()
+        movePill.visibility = View.GONE
+        updateSelectUi()
+        updateHeroRunning()
+    }
+
+    private fun toggleSelect(pkg: String) {
+        if (!selected.remove(pkg)) {
+            if (!canUninstall(pkg)) {
+                Toast.makeText(ctx, "${labelOf(pkg)} is a system app and cannot be uninstalled", Toast.LENGTH_LONG).show()
+                return
+            }
+            selected.add(pkg)
+        }
+        tileOf(pkg)?.badge = pkg in selected
+        updateSelectUi()
+    }
+
+    /** The top button's label and the hint pill follow the selection. */
+    private fun updateSelectUi() {
+        val n = selected.size
+        uninstallPill.label = when {
+            !selectMode -> "Uninstall apps"
+            n == 0 -> "Cancel"
+            else -> "Uninstall $n"
+        }
+        uninstallPill.alert = selectMode && n > 0
+        if (selectMode) moveHint.text = if (n == 0) "OK to select apps · Back to cancel"
+            else "$n selected · Menu to uninstall · Hold OK for options · Back to cancel"
+    }
+
+    private fun uninstallSelected() {
+        if (selected.isEmpty()) {
+            Toast.makeText(ctx, "Select apps first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        uninstall(selected.toList())
+    }
+
+    /**
+     * Uninstalls [pkgs] one after another through the system's own confirmation dialog, which stays the final say:
+     * Back on it stops the rest. The overlay (no result callback) opens the dialog for the first app only.
+     */
+    fun uninstall(pkgs: List<String>) {
+        if (uninstalling) return
+        val ok = pkgs.filter { isInstalled(it) && canUninstall(it) }
+        if (ok.isEmpty()) {
+            Toast.makeText(ctx, "System apps cannot be uninstalled. Use Hide app instead.", Toast.LENGTH_LONG).show()
+            return
+        }
+        uninstallQueue.addAll(ok)
+        nextUninstall()
+    }
+
+    private fun nextUninstall() {
+        while (uninstallQueue.isNotEmpty()) {
+            val pkg = uninstallQueue.removeAt(0)
+            if (!isInstalled(pkg)) continue
+            val i = Intent(Intent.ACTION_DELETE, android.net.Uri.parse("package:$pkg")).putExtra(Intent.EXTRA_RETURN_RESULT, true)
+            try {
+                val a = ctx as? Activity
+                if (a == null) {
+                    uninstallQueue.clear()
+                    host.startApp(i, pkg, null)
+                } else {
+                    uninstallPending = pkg
+                    a.startActivityForResult(i, REQ_UNINSTALL)
+                }
+                return
+            } catch (e: Exception) {
+                uninstallPending = null
+                Toast.makeText(ctx, "Cannot uninstall ${labelOf(pkg)} on this TV", Toast.LENGTH_LONG).show()
+            }
+        }
+        exitSelect()
+    }
+
+    /** The system dialog for the pending app closed (MainActivity.onActivityResult). */
+    fun onUninstallResult(code: Int) {
+        pausedForUninstall = false
+        val pkg = uninstallPending ?: return
+        uninstallPending = null
+        when {
+            !isInstalled(pkg) || code == Activity.RESULT_OK -> {}
+            code == Activity.RESULT_CANCELED -> {
+                // Stop here and keep the selection, so it can be changed.
+                val skipped = uninstallQueue.size
+                uninstallQueue.clear()
+                if (skipped > 0) Toast.makeText(ctx, "Stopped. $skipped more not uninstalled.", Toast.LENGTH_SHORT).show()
+                return
+            }
+            else -> Toast.makeText(ctx, "Could not uninstall ${labelOf(pkg)}", Toast.LENGTH_LONG).show()
+        }
+        nextUninstall()
+    }
+
+    // ---------- Move mode (from the app's options) ----------
 
     private fun tileOf(pkg: String?): TileView? {
         if (pkg == null) return null
@@ -910,6 +1133,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         val pkg = t.app?.pkg ?: return
         if (editMode || movingPkg != null || settings.isOpen || cc.isOpen) return
         movingPkg = pkg
+        moveHint.text = MOVE_HINT
         moveFrom = Pair(dockPkgs.toList(), drawerPkgs.toList())
         t.picked = true
         t.setJiggle(true, gentle = true)
@@ -1049,6 +1273,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
     private fun leaveMove() {
         if (appMenu.isOpen) appMenu.close()
         if (movingPkg != null) cancelMove()
+        if (selectMode && !uninstalling) exitSelect()
     }
 
     /** Re-reads the saved dock (changed on the other home screen). */
@@ -1265,6 +1490,10 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             }
             return false
         }
+        if (selectMode && code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+            if (down && e.repeatCount == 0) uninstallSelected()
+            return true
+        }
         if (editMode) {
             val idx = dockTiles.indexOf(focusTile)
             if (ok && idx >= 0) {
@@ -1298,7 +1527,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
                     if (prev.isNotEmpty()) { prev[col.coerceIn(0, prev.size - 1)].requestFocus(View.FOCUS_UP); return true }
                 }
             }
-        } else if (down && focused() === gear && code == KeyEvent.KEYCODE_DPAD_DOWN) {
+        } else if (down && (focused() === gear || focused() === uninstallPill) && code == KeyEvent.KEYCODE_DPAD_DOWN) {
             focusDock(); return true
         }
         return false
@@ -1311,6 +1540,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             settings.isOpen -> settings.close()
             appMenu.isOpen -> appMenu.close()
             movingPkg != null -> openAppMenu()
+            selectMode -> uninstallSelected()
             editMode -> removeFocusedFromDock()
             else -> openControlCenter()
         }
@@ -1323,6 +1553,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             settings.isOpen -> settings.close()
             appMenu.isOpen -> appMenu.close()
             movingPkg != null -> cancelMove()
+            selectMode -> exitSelect()
             editMode -> exitEdit()
             continueRow.hasFocus() -> focusDock()
             currentRow > 0 -> focusDock()
@@ -1363,5 +1594,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
 
     companion object {
         const val COLS = 6
+        const val REQ_UNINSTALL = 52
+        private const val MOVE_HINT = "Arrows to move · OK to drop · Menu for options · Back to cancel"
     }
 }
