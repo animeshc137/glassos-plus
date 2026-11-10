@@ -5,6 +5,7 @@ import android.content.Intent
 import android.media.tv.TvContract
 import android.media.tv.TvInputInfo
 import android.media.tv.TvInputManager
+import android.os.Build
 
 /** One external input of the TV (HDMI, AV, component) that can be switched to. */
 class TvInput(val id: String, val label: String)
@@ -20,7 +21,8 @@ object TvInputs {
     } catch (e: Throwable) { emptyList() }
 
     private fun labelOf(ctx: Context, info: TvInputInfo): String {
-        val custom = try { info.loadCustomLabel(ctx)?.toString() } catch (e: Throwable) { null }
+        // loadCustomLabel (the name the user gave the input) needs API 24; older TVs show the standard label.
+        val custom = if (Build.VERSION.SDK_INT >= 24) try { info.loadCustomLabel(ctx)?.toString() } catch (e: Throwable) { null } else null
         val label = custom?.takeIf { it.isNotBlank() } ?: try { info.loadLabel(ctx)?.toString() } catch (e: Throwable) { null }
         return label?.takeIf { it.isNotBlank() } ?: fallbackLabel(info.id)
     }
