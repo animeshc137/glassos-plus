@@ -1550,7 +1550,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         when {
             setup.isOpen -> setup.back()
             cc.isOpen -> cc.back()
-            settings.isOpen -> settings.close()
+            settings.isOpen -> settings.back()
             appMenu.isOpen -> appMenu.close()
             movingPkg != null -> cancelMove()
             selectMode -> exitSelect()

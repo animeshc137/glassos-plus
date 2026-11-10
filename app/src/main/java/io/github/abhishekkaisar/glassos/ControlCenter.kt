@@ -27,7 +27,7 @@ import android.widget.TextView
 import android.widget.Toast
 
 /** Line glyphs for Control Center, drawn in a box of side s centred on (cx, cy). No vector assets. */
-enum class Glyph { NONE, POWER, WIFI, MOON, SPEAKER, TIMER, GAMEPAD, ACCESS, LOCK, GEAR, PEOPLE, PLAY, PAUSE, PREV, NEXT, SHIELD, TOGGLES, NOTE, CHECK, CLOSE, OPEN }
+enum class Glyph { NONE, POWER, WIFI, MOON, SPEAKER, TIMER, GAMEPAD, ACCESS, LOCK, GEAR, PEOPLE, PLAY, PAUSE, PREV, NEXT, SHIELD, TOGGLES, NOTE, CHECK, CLOSE, OPEN, INPUT }
 
 object Glyphs {
     private val path = Path()
@@ -195,6 +195,14 @@ object Glyphs {
                 c.drawLine(cx - h * 0.18f, cy + h * 0.52f, cx - h * 0.18f, cy - h * 0.62f, p)
                 c.drawLine(cx + h * 0.74f, cy + h * 0.36f, cx + h * 0.74f, cy - h * 0.82f, p)
                 c.drawLine(cx - h * 0.18f, cy - h * 0.62f, cx + h * 0.74f, cy - h * 0.82f, p)
+            }
+            Glyph.INPUT -> {
+                // A socket with an arrow plugging into it.
+                r.set(cx - h * 0.2f, cy - h * 0.8f, cx + h * 0.88f, cy + h * 0.8f)
+                c.drawRoundRect(r, h * 0.2f, h * 0.2f, p)
+                c.drawLine(cx - h * 0.95f, cy, cx + h * 0.2f, cy, p)
+                c.drawLine(cx - h * 0.22f, cy - h * 0.4f, cx + h * 0.2f, cy, p)
+                c.drawLine(cx - h * 0.22f, cy + h * 0.4f, cx + h * 0.2f, cy, p)
             }
             Glyph.CHECK -> {
                 path.reset()
@@ -374,6 +382,7 @@ class ControlCenter(private val home: HomeScreen) : FrameLayout(home.ctx) {
     private val tabButtons = LinkedHashMap<Tab, CcButton>()
     private var tab = Tab.GENERAL
     private var timerButton: CcButton? = null
+    private var inputsButton: CcButton? = null
     private var dndButton: CcButton? = null
     private var playButton: CcButton? = null
     /** A sub-view (timer choices, profile confirm) is shown; Back returns to the tab's buttons. */
@@ -504,7 +513,7 @@ class ControlCenter(private val home: HomeScreen) : FrameLayout(home.ctx) {
         tabButtons.forEach { (k, b) -> b.current = k == t }
         title.text = t.title
         body.removeAllViews()
-        timerButton = null; dndButton = null; playButton = null
+        timerButton = null; inputsButton = null; dndButton = null; playButton = null
         if (t != Tab.NOW_PLAYING) unwatchSession()
         when (t) {
             Tab.PROFILE -> buildProfile()
@@ -572,6 +581,9 @@ class ControlCenter(private val home: HomeScreen) : FrameLayout(home.ctx) {
         val audio = button(Glyph.SPEAKER, "Audio") {
             if (fireTv) open(FireIntents.audio(), FireIntents.SETTINGS_PKG, "Choose Display & Audio") else openStd(android.provider.Settings.ACTION_SOUND_SETTINGS)
         }
+        // TVs with external inputs (HDMI, AV): pick one to switch to it. Fire TV has none.
+        val inputs = if (TvInputs.list(ctx).isEmpty()) null else button(Glyph.INPUT, "Inputs") { showInputChoices() }
+        inputsButton = inputs
         val timer = button(Glyph.TIMER, "Sleep Timer") { showTimerChoices() }.apply {
             text = SleepTimer.remaining(ctx); on = text != null
         }
@@ -597,7 +609,28 @@ class ControlCenter(private val home: HomeScreen) : FrameLayout(home.ctx) {
             else button(Glyph.LOCK, "Parental") { open(FireIntents.parental(), "com.amazon.tv.parentalcontrols", "Choose Preferences, then Parental Controls") }
         val fire = button(Glyph.OPEN, "TV Settings") { close(instant = true) { home.openFireSettings() } }
         val gear = button(Glyph.GEAR, "GlassOS") { close(instant = true) { home.openSettings() } }
-        body.addView(grid(listOfNotNull(power, wifi, dnd, audio, timer, pads, acc, pc, fire, gear)))
+        body.addView(grid(listOfNotNull(power, wifi, inputs, dnd, audio, timer, pads, acc, pc, fire, gear)))
+    }
+
+    /** The TV's external inputs; choosing one switches to it through the Live TV app. */
+    private fun showInputChoices() = rebuild {
+        body.removeAllViews()
+        title.text = "Inputs"
+        val ctx = context
+        val items = TvInputs.list(ctx).map { input ->
+            CcButton(ctx, btn, cell, Glyph.INPUT, input.label).apply {
+                id = View.generateViewId()
+                onClick = {
+                    val i = TvInputs.intent(input)
+                    open(i, Platform.handler(ctx, i), "Could not switch to ${input.label}")
+                }
+            }
+        }
+        body.addView(grid(items))
+        linkUp()
+        subView = { showTab(Tab.GENERAL); inputsButton?.requestFocus() }
+        firstButton()?.requestFocus()
+        invalidateDeep(panel)
     }
 
     /** A standard Settings page (Android TV and Google TV). */
