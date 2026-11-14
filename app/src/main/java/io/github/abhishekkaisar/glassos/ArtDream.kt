@@ -172,31 +172,32 @@ class ArtShowView(ctx: Context) : View(ctx) {
         }.apply { priority = Thread.MIN_PRIORITY }.start()
     }
 
-    private fun build(s: Slide, w: Int, h: Int): Frame? = try {
-        val f: File = s.art ?: return null
-        if (!prefs.saverFrame) {
-            // Full screen: the painting fills the screen, cropped at the edges where its shape differs.
-            val full = WallpaperStore.decodeCrop(f, w, h)
-            return if (full == null) null else Frame(full, null, s.title, s.subtitle, false)
-        }
-        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(f.path, o)
-        if (o.outWidth <= 0 || o.outHeight <= 0) null else {
+    private fun build(s: Slide, w: Int, h: Int): Frame? {
+        try {
+            val f: File = s.art ?: return null
+            if (!prefs.saverFrame) {
+                // Full screen: the painting fills the screen, cropped at the edges where its shape differs.
+                val full = WallpaperStore.decodeCrop(f, w, h) ?: return null
+                return Frame(full, null, s.title, s.subtitle, false)
+            }
+            val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(f.path, o)
+            if (o.outWidth <= 0 || o.outHeight <= 0) return null
             // The painting fits a box inside the screen, leaving room for the frame and the title line.
             val box = minOf(w * 0.84f / o.outWidth, h * 0.74f / o.outHeight)
             val tw = (o.outWidth * box).toInt().coerceAtLeast(1)
             val th = (o.outHeight * box).toInt().coerceAtLeast(1)
             var sample = 1
             while (o.outWidth / (sample * 2) >= tw && o.outHeight / (sample * 2) >= th) sample *= 2
-            val raw = BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = sample })
-            if (raw == null) null else {
-                val art = if (raw.width == tw && raw.height == th) raw else Bitmap.createScaledBitmap(raw, tw, th, true).also { if (it !== raw) raw.recycle() }
-                val crop = WallpaperStore.decodeCrop(f, w / 2, h / 2)
-                val back = if (crop != null) Blur.makeBackdrop(crop).also { crop.recycle() } else art
-                Frame(art, back, s.title, s.subtitle, true)
-            }
+            val raw = BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+            val art = if (raw.width == tw && raw.height == th) raw else Bitmap.createScaledBitmap(raw, tw, th, true).also { if (it !== raw) raw.recycle() }
+            val crop = WallpaperStore.decodeCrop(f, w / 2, h / 2)
+            val back = if (crop != null) Blur.makeBackdrop(crop).also { crop.recycle() } else art
+            return Frame(art, back, s.title, s.subtitle, true)
+        } catch (e: Throwable) {
+            return null
         }
-    } catch (e: Throwable) { null }
+    }
 
     private fun show(f: Frame, first: Boolean) {
         next = f
