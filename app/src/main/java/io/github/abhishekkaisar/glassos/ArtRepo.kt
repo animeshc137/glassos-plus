@@ -126,12 +126,19 @@ object ArtRepo {
         val words = filters.genres.flatMap { g -> GENRES.firstOrNull { it.first == g }?.second ?: emptyList() }.map { it.lowercase() }
         val found = LinkedHashMap<Long, Found>()
         var reached = false
-        for ((i, painter) in painters.shuffled().take(PAINTERS_PER_REFRESH).withIndex()) {
-            if (i > 0) Thread.sleep(400)
-            val (code, files) = category(painter)
-            if (code == 200) reached = true
-            val list = if (files.isEmpty() && code == 200) { Thread.sleep(400); search(painter) } else files
-            for (f in list) if (!found.containsKey(f.id)) found[f.id] = f
+        val picks = painters.shuffled().take(PAINTERS_PER_REFRESH)
+        // Look the painters up side by side: each answer takes a second or two, and they add up one after another.
+        val results = arrayOfNulls<Pair<Int, List<Found>>>(picks.size)
+        picks.mapIndexed { i, painter ->
+            Thread {
+                val (code, files) = category(painter)
+                results[i] = code to (if (files.isEmpty() && code == 200) search(painter) else files)
+            }.also { t -> t.start() }
+        }.forEach { t -> t.join() }
+        for (r in results) {
+            if (r == null) continue
+            if (r.first == 200) reached = true
+            for (f in r.second) if (!found.containsKey(f.id)) found[f.id] = f
         }
         if (!reached) {
             HeroRepo.lastResult[src] = "Could not reach commons.wikimedia.org"
