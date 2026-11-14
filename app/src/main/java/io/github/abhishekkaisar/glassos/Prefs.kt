@@ -160,6 +160,16 @@ class Prefs(ctx: Context) {
         get() = list("artArtists", emptyList())
         set(v) = putList("artArtists", v)
 
+    /** India and South Asia collections (see [ArtRepo.INDIA]); empty: none. */
+    var artRegions: List<String>
+        get() = list("artRegions", emptyList())
+        set(v) = putList("artRegions", v)
+
+    /** Leave out nude artwork (a guess from titles and categories). */
+    var artHideNude: Boolean
+        get() = sp.getBoolean("artHideNude", true)
+        set(v) { sp.edit().putBoolean("artHideNude", v).apply() }
+
     var artCount: Int
         get() = sp.getInt("artCount", 24)
         set(v) { sp.edit().putInt("artCount", v).apply() }
@@ -200,6 +210,14 @@ class Prefs(ctx: Context) {
     var saverArtists: List<String>
         get() = list("saverArtists", emptyList())
         set(v) = putList("saverArtists", v)
+
+    var saverRegions: List<String>
+        get() = list("saverRegions", emptyList())
+        set(v) = putList("saverRegions", v)
+
+    var saverHideNude: Boolean
+        get() = sp.getBoolean("saverHideNude", true)
+        set(v) { sp.edit().putBoolean("saverHideNude", v).apply() }
 
     var saverCount: Int
         get() = sp.getInt("saverCount", 24)

@@ -185,7 +185,12 @@ Choose in Settings > Top Shelf:
 - **Art (museum paintings)**: the public-domain scans Google Arts & Culture made of museum paintings, as kept on
   [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Google_Art_Project) (Google has no public feed).
   Settings > Art paintings filters by painter (pick famous ones or add any name), movement, age and subject (the
-  subject is guessed from the title, so it is approximate).
+  subject is guessed from the title, so it is approximate). **India & South Asia** adds Hindu religious art (Krishna,
+  Ganesha, Shiva, Vishnu, Rama and Hanuman, Durga and Lakshmi) and Indian painting (Raja Ravi Varma, Kangra, Pahari,
+  Rajput and Mughal miniatures, the Bengal School, folk art, Himalayan thangkas, landscapes of India) from Commons
+  categories; they mix in with any painters you pick. **Hide nude artwork** (on by default) leaves out pictures whose
+  title or Commons categories suggest a nude. It is a guess from words, so it can miss one and can hide a clothed
+  picture such as bathers.
 - **Built-in scenes**: no network at all.
 
 ### Art screensaver
@@ -193,7 +198,8 @@ Choose in Settings > Top Shelf:
 Settings > Art screensaver shows famous paintings full screen, one at a time, changing every 10 seconds to 15 minutes,
 with the title and painter bottom left. "Frame" shows each painting framed on a dark backdrop instead. It has the same
 filters as the Art wallpaper (subject, age, movement, painters), either its own set or, with "Same filters as the Art
-wallpaper", the wallpaper's. Android starts it when idle once it is chosen under Settings > Device Preferences >
+wallpaper", the wallpaper's. Tall paintings (most miniatures) are shown whole, fitted to the screen's height on a
+blurred copy of themselves; the wallpaper uses only landscape pictures. Android starts it when idle once it is chosen under Settings > Device Preferences >
 Screen saver; "Make it the screensaver" does that over the TV's own ADB. Fire TV may not allow third-party screensavers.
 
 Settings > Wallpaper interval sets how long each Top Shelf picture stays before the next one fades in

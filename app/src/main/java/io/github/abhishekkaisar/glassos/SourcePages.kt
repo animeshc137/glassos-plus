@@ -292,10 +292,16 @@ object SourcePages {
         var artists: List<String>
             get() = if (saver) prefs.saverArtists else prefs.artArtists
             set(v) { if (saver) prefs.saverArtists = v else prefs.artArtists = v }
+        var regions: List<String>
+            get() = if (saver) prefs.saverRegions else prefs.artRegions
+            set(v) { if (saver) prefs.saverRegions = v else prefs.artRegions = v }
+        var hideNude: Boolean
+            get() = if (saver) prefs.saverHideNude else prefs.artHideNude
+            set(v) { if (saver) prefs.saverHideNude = v else prefs.artHideNude = v }
         var count: Int
             get() = if (saver) prefs.saverCount else prefs.artCount
             set(v) { if (saver) prefs.saverCount = v else prefs.artCount = v }
-        fun clear() { genres = emptyList(); eras = emptyList(); styles = emptyList(); artists = emptyList() }
+        fun clear() { genres = emptyList(); eras = emptyList(); styles = emptyList(); artists = emptyList(); regions = emptyList() }
     }
 
     /** Subject, Age, Movement, Painters, clearing them and how many to keep: the same rows for the wallpaper and the screensaver. */
@@ -304,6 +310,11 @@ object SourcePages {
         b.sub("Age", { summary(f.eras) }) { eras(f) }
         b.sub("Movement", { summary(f.styles) }) { styles(f) }
         b.sub("Painters", { summary(f.artists) }) { painters(f) }
+        b.sub("India & South Asia", { summary(f.regions) }) { india(f) }
+        b.toggle("Hide nude artwork", { f.hideNude }) {
+            f.hideNude = it
+            b.host.changed(f.src)
+        }
         b.action("Clear all filters", "›") { _ ->
             f.clear()
             b.host.changed(f.src)
@@ -315,7 +326,7 @@ object SourcePages {
 
     fun art(): Page = Page("Art paintings") {
         val p = act.prefs
-        note("Famous paintings: the public-domain scans Google Arts & Culture made of museum paintings, as kept on Wikimedia Commons. Tick nothing to see a mix of famous painters.")
+        note("Famous paintings: the public-domain scans Google Arts & Culture made of museum paintings, as kept on Wikimedia Commons. Tick nothing to see a mix of famous painters. India & South Asia adds Hindu religious art and Indian painting; Hide nude artwork leaves out nudes (a guess from titles, so it can miss some).")
         useAsBackground(this, HeroRepo.SRC_ART)
         wallpaperTime(this)
         filterRows(this, Filt(p, false))
@@ -338,6 +349,11 @@ object SourcePages {
     private fun styles(f: Filt): Page = Page("Movement") {
         note("Shows the famous painters of that movement (pick painters too to narrow it).")
         pick(this, ArtRepo.MOVEMENTS.map { it.first to it.first }, { f.styles }, { f.styles = it }, null, TextInput.Kind.PLAIN, { it }, { it }, f.src)
+    }
+
+    private fun india(f: Filt): Page = Page("India & South Asia") {
+        note("Hindu religious art and the art of India and the Indian subcontinent, from Wikimedia Commons: the gods, the miniature schools, Raja Ravi Varma, the Bengal School, folk art and more. They mix in with any painters you choose; with nothing else chosen you see only these.")
+        pick(this, ArtRepo.INDIA.map { it.label to it.label }, { f.regions }, { f.regions = it }, null, TextInput.Kind.PLAIN, { it }, { it }, f.src)
     }
 
     private fun painters(f: Filt): Page = Page("Painters") {
