@@ -83,7 +83,7 @@ object ArtRepo {
                 val (code, text) = post(JSONObject(body.toString()).put("fields", FIELDS).put("limit", PAGE).put("page", p).toString())
                 if (code != 200 || text == null) { failure = describe(code); break }
                 val data = try { JSONObject(text).getJSONArray("data") } catch (e: Throwable) { continue }
-                for (i in 0 until data.length()) item(data.optJSONObject(i))?.let { found.putIfAbsent(it.id, it) }
+                for (i in 0 until data.length()) item(data.optJSONObject(i))?.let { if (!found.containsKey(it.id)) found[it.id] = it }
                 if (found.size >= want * 2) break
             }
             if (found.isNotEmpty()) return found.values.shuffled().take(want)

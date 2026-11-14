@@ -74,7 +74,7 @@ object RedditRepo {
             for (i in 0 until children.length()) {
                 val d = children.optJSONObject(i)?.optJSONObject("data") ?: continue
                 val item = item(d, minW) ?: continue
-                out.putIfAbsent(item.id, item)
+                if (!out.containsKey(item.id)) out[item.id] = item
                 if (out.size >= want) break
             }
             after = data.optString("after").takeIf { it.isNotBlank() && it != "null" }
