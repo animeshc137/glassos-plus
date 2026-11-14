@@ -58,6 +58,8 @@ object HeroRepo {
     /** Wallpapers from subreddits (see [RedditRepo]) and museum paintings (see [ArtRepo]); both are plain images, no titles. */
     const val SRC_REDDIT = "reddit"
     const val SRC_ART = "art"
+    /** The art screensaver's own paintings, when it does not use the Art wallpaper's filters. Not a Top Shelf choice. */
+    const val SRC_ARTSAVER = "artsaver"
     val SOURCES = listOf(SRC_CINEMETA to "Movies & series (Cinemeta)", SRC_TMDB to "TMDB", SRC_APPLE to "Apple TV (unofficial)",
         SRC_REDDIT to "Reddit wallpapers", SRC_ART to "Art (museum paintings)", SRC_SCENES to "Built-in scenes")
     fun sourceLabel(id: String) = SOURCES.firstOrNull { it.first == id }?.second ?: id
@@ -66,7 +68,7 @@ object HeroRepo {
     /** How long a source's cache stays fresh: Reddit and Art follow their own setting, the rest 6 hours. */
     private fun refreshMs(ctx: Context, src: String): Long = when (src) {
         SRC_REDDIT -> Prefs(ctx).redditRefreshHours.coerceAtLeast(1) * 3600_000L
-        SRC_ART -> Prefs(ctx).artRefreshHours.coerceAtLeast(1) * 3600_000L
+        SRC_ART, SRC_ARTSAVER -> Prefs(ctx).artRefreshHours.coerceAtLeast(1) * 3600_000L
         else -> REFRESH_MS
     }
 
@@ -161,16 +163,18 @@ object HeroRepo {
             SRC_CINEMETA -> Cinemeta.fetch(Prefs(ctx).catalogContent, cachedTitles(ctx, src).map { it.key.removePrefix("t:") }.toSet())
             SRC_TMDB -> Tmdb.fetch(ctx)
             SRC_REDDIT -> RedditRepo.fetch(Prefs(ctx))
-            SRC_ART -> ArtRepo.fetch(Prefs(ctx))
+            SRC_ART -> ArtRepo.fetch(ArtRepo.wallpaperFilters(Prefs(ctx)), SRC_ART)
+            SRC_ARTSAVER -> ArtRepo.fetch(ArtRepo.saverFilters(Prefs(ctx)), SRC_ARTSAVER)
             else -> appleItems(d) ?: return false
         }
         val keep = when (src) {
             SRC_REDDIT -> Prefs(ctx).redditCount
             SRC_ART -> Prefs(ctx).artCount
+            SRC_ARTSAVER -> Prefs(ctx).saverCount
             else -> Int.MAX_VALUE
         }
         val changed = store(d, items, if (src == SRC_APPLE) "us" else Prefs(ctx).country, keep)
-        if (src == SRC_REDDIT || src == SRC_ART) {
+        if (src == SRC_REDDIT || src == SRC_ART || src == SRC_ARTSAVER) {
             // The fetchers say why they found nothing (offline, blocked, filters too strict) in lastResult.
             val why = lastResult[src]
             lastResult[src] = when {

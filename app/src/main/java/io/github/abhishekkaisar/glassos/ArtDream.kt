@@ -7,8 +7,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -22,10 +24,11 @@ import android.view.WindowManager
 import java.io.File
 
 /**
- * The art screensaver: a framed painting on a dark, blurred copy of itself, a title line under it, and a slow
- * crossfade to the next one. Android starts it when idle once it is chosen under Settings > Device Preferences >
- * Screen saver (Settings > Art paintings > Screensaver can choose it over the TV's own ADB). The paintings are
- * the ones the Art filters pick, kept in the same cache as the Art background.
+ * The art screensaver: a painting filling the screen with a slow crossfade to the next one, a caption bottom left,
+ * or (Frame on) each painting framed on a dark, blurred copy of itself with the title under it. Android starts it
+ * when idle once it is chosen under Settings > Device Preferences > Screen saver (Settings > Art screensaver can
+ * choose it over the TV's own ADB). The paintings are the Art wallpaper's (same filters) or, by default, the ones
+ * the screensaver's own filters pick.
  */
 class ArtDream : DreamService() {
     private var show: ArtShowView? = null
@@ -65,8 +68,11 @@ class ArtPreviewActivity : Activity() {
 }
 
 class ArtShowView(ctx: Context) : View(ctx) {
-    /** A painting ready to draw: scaled to fit, a blurred backdrop and its caption. */
-    private class Frame(val art: Bitmap, val backdrop: Bitmap, val title: String, val subtitle: String)
+    /**
+     * A painting ready to draw. Framed: scaled to fit, with a blurred [backdrop] behind it. Not framed: [art] is
+     * already cropped to the screen and there is no backdrop.
+     */
+    private class Frame(val art: Bitmap, val backdrop: Bitmap?, val title: String, val subtitle: String, val framed: Boolean)
 
     private val ui = Handler(Looper.getMainLooper())
     private val prefs = Prefs(ctx)
@@ -84,6 +90,8 @@ class ArtShowView(ctx: Context) : View(ctx) {
     private val bitmapPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val rect = RectF()
+    /** Darkens the bottom of a full-screen painting so the caption can be read over any picture. */
+    private val scrim = Paint()
     private val title = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Fonts.medium; color = Color.WHITE; textSize = dp(22f) }
     private val sub = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Fonts.regular; color = Color.WHITE; textSize = dp(16f) }
     private val clock = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Fonts.light; color = Color.WHITE; textSize = dp(34f); textAlign = Paint.Align.RIGHT }
@@ -119,6 +127,7 @@ class ArtShowView(ctx: Context) : View(ctx) {
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        scrim.shader = LinearGradient(0f, h * 0.68f, 0f, h.toFloat(), 0x00000000, 0xB8000000.toInt(), Shader.TileMode.CLAMP)
         if (running && cur == null && next == null && w > 0) loadNext(first = true)
     }
 
@@ -128,15 +137,17 @@ class ArtShowView(ctx: Context) : View(ctx) {
         val w = width
         val h = height
         if (w <= 0 || h <= 0) return
+        // The Art wallpaper's paintings, or the screensaver's own when it has its own filters.
+        val src = if (prefs.saverSameFilters) HeroRepo.SRC_ART else HeroRepo.SRC_ARTSAVER
         Thread {
             if (queue.isEmpty() || pos >= queue.size) {
-                var slides = HeroRepo.cachedTitles(context, HeroRepo.SRC_ART)
+                var slides = HeroRepo.cachedTitles(context, src)
                 if (slides.isEmpty()) {
                     // Nothing cached yet (first run, or the filters changed): fetch now.
-                    HeroRepo.refresh(context, HeroRepo.SRC_ART)
-                    slides = HeroRepo.cachedTitles(context, HeroRepo.SRC_ART)
-                } else if (HeroRepo.isStale(context, HeroRepo.SRC_ART)) {
-                    Thread { HeroRepo.refresh(context, HeroRepo.SRC_ART) }.apply { priority = Thread.MIN_PRIORITY }.start()
+                    HeroRepo.refresh(context, src)
+                    slides = HeroRepo.cachedTitles(context, src)
+                } else if (HeroRepo.isStale(context, src)) {
+                    Thread { HeroRepo.refresh(context, src) }.apply { priority = Thread.MIN_PRIORITY }.start()
                 }
                 queue = ArrayList(slides.shuffled())
                 pos = 0
@@ -152,7 +163,7 @@ class ArtShowView(ctx: Context) : View(ctx) {
             ui.post {
                 if (t != token || !running) return@post
                 if (frame == null) {
-                    message = HeroRepo.lastResult[HeroRepo.SRC_ART] ?: "No paintings yet. Open Settings > Art paintings."
+                    message = HeroRepo.lastResult[src] ?: "No paintings yet. Open Settings > Art screensaver."
                     invalidate()
                     // Try again later (offline, or the filters match nothing).
                     ui.postDelayed({ if (running && t == token) loadNext(first) }, 60_000)
@@ -163,6 +174,11 @@ class ArtShowView(ctx: Context) : View(ctx) {
 
     private fun build(s: Slide, w: Int, h: Int): Frame? = try {
         val f: File = s.art ?: return null
+        if (!prefs.saverFrame) {
+            // Full screen: the painting fills the screen, cropped at the edges where its shape differs.
+            val full = WallpaperStore.decodeCrop(f, w, h)
+            return if (full == null) null else Frame(full, null, s.title, s.subtitle, false)
+        }
         val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(f.path, o)
         if (o.outWidth <= 0 || o.outHeight <= 0) null else {
@@ -177,7 +193,7 @@ class ArtShowView(ctx: Context) : View(ctx) {
                 val art = if (raw.width == tw && raw.height == th) raw else Bitmap.createScaledBitmap(raw, tw, th, true).also { if (it !== raw) raw.recycle() }
                 val crop = WallpaperStore.decodeCrop(f, w / 2, h / 2)
                 val back = if (crop != null) Blur.makeBackdrop(crop).also { crop.recycle() } else art
-                Frame(art, back, s.title, s.subtitle)
+                Frame(art, back, s.title, s.subtitle, true)
             }
         }
     } catch (e: Throwable) { null }
@@ -225,12 +241,34 @@ class ArtShowView(ctx: Context) : View(ctx) {
         }
     }
 
-    private fun drawFrame(c: Canvas, f: Frame, a: Float) {
+    /** Full screen: the painting, and its caption bottom left over a soft dark band. */
+    private fun drawFull(c: Canvas, f: Frame, a: Float) {
         val w = width.toFloat()
         val h = height.toFloat()
         bitmapPaint.alpha = (255 * a).toInt()
         rect.set(0f, 0f, w, h)
-        c.drawBitmap(f.backdrop, null, rect, bitmapPaint)
+        c.drawBitmap(f.art, null, rect, bitmapPaint)
+        if (prefs.saverCaption && f.title.isNotEmpty()) {
+            scrim.alpha = (255 * a).toInt()
+            c.drawRect(0f, h * 0.68f, w, h, scrim)
+            val x = w * 0.05f
+            val avail = w * 0.7f
+            val y = h - h * 0.075f - dp(26f)
+            title.alpha = (240 * a).toInt()
+            sub.alpha = (185 * a).toInt()
+            c.drawText(TextUtils.ellipsize(f.title, title, avail, TextUtils.TruncateAt.END).toString(), x, y, title)
+            if (f.subtitle.isNotEmpty()) c.drawText(TextUtils.ellipsize(f.subtitle, sub, avail, TextUtils.TruncateAt.END).toString(), x, y + dp(26f), sub)
+        }
+    }
+
+    private fun drawFrame(c: Canvas, f: Frame, a: Float) {
+        if (!f.framed) { drawFull(c, f, a); return }
+        val backdrop = f.backdrop ?: return
+        val w = width.toFloat()
+        val h = height.toFloat()
+        bitmapPaint.alpha = (255 * a).toInt()
+        rect.set(0f, 0f, w, h)
+        c.drawBitmap(backdrop, null, rect, bitmapPaint)
         fill.color = alphaOf(Color.BLACK, 0.58f * a)
         c.drawRect(rect, fill)
         val pw = f.art.width.toFloat()

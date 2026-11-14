@@ -98,10 +98,20 @@ object ArtRepo {
     private class Found(val id: Long, val file: String, val painter: String, val width: Int, val height: Int,
                          val thumb: String, val page: String, val year: Int?, val categories: String)
 
-    /** Fetches paintings that match the filters. Returns an empty list (and sets [HeroRepo.lastResult]) when there are none. */
-    fun fetch(prefs: Prefs): List<HeroRepo.Item> {
-        val chosen = prefs.artArtists
-        val fromMovements = prefs.artStyles.flatMap { s -> MOVEMENTS.firstOrNull { it.first == s }?.second ?: emptyList() }.distinct()
+    /** One set of filters (empty list: any). The wallpaper and the screensaver each have one. */
+    class Filters(val genres: List<String>, val eras: List<String>, val styles: List<String>, val artists: List<String>)
+
+    fun wallpaperFilters(p: Prefs) = Filters(p.artGenres, p.artEras, p.artStyles, p.artArtists)
+
+    /** The screensaver's own filters, or the wallpaper's when "same filters" is on. */
+    fun saverFilters(p: Prefs) = if (p.saverSameFilters) wallpaperFilters(p) else Filters(p.saverGenres, p.saverEras, p.saverStyles, p.saverArtists)
+
+    /**
+     * Fetches paintings that match [filters]. Returns an empty list (and sets [HeroRepo.lastResult] for [src]) when there are none.
+     */
+    fun fetch(filters: Filters, src: String): List<HeroRepo.Item> {
+        val chosen = filters.artists
+        val fromMovements = filters.styles.flatMap { s -> MOVEMENTS.firstOrNull { it.first == s }?.second ?: emptyList() }.distinct()
         val painters: List<String> = when {
             chosen.isNotEmpty() && fromMovements.isNotEmpty() -> chosen.filter { c -> fromMovements.any { it.equals(c, true) } }
             chosen.isNotEmpty() -> chosen
@@ -109,11 +119,11 @@ object ArtRepo {
             else -> DEFAULT_POOL
         }
         if (painters.isEmpty()) {
-            HeroRepo.lastResult[HeroRepo.SRC_ART] = "None of the chosen painters belongs to the chosen movements"
+            HeroRepo.lastResult[src] = "None of the chosen painters belongs to the chosen movements"
             return emptyList()
         }
-        val eras = prefs.artEras.mapNotNull { e -> ERAS.firstOrNull { it.label == e } }
-        val words = prefs.artGenres.flatMap { g -> GENRES.firstOrNull { it.first == g }?.second ?: emptyList() }.map { it.lowercase() }
+        val eras = filters.eras.mapNotNull { e -> ERAS.firstOrNull { it.label == e } }
+        val words = filters.genres.flatMap { g -> GENRES.firstOrNull { it.first == g }?.second ?: emptyList() }.map { it.lowercase() }
         val found = LinkedHashMap<Long, Found>()
         var reached = false
         for ((i, painter) in painters.shuffled().take(PAINTERS_PER_REFRESH).withIndex()) {
@@ -124,7 +134,7 @@ object ArtRepo {
             for (f in list) if (!found.containsKey(f.id)) found[f.id] = f
         }
         if (!reached) {
-            HeroRepo.lastResult[HeroRepo.SRC_ART] = "Could not reach commons.wikimedia.org"
+            HeroRepo.lastResult[src] = "Could not reach commons.wikimedia.org"
             return emptyList()
         }
         val items = found.values.filter { f ->
@@ -132,7 +142,7 @@ object ArtRepo {
                 (eras.isEmpty() || f.year != null && eras.any { f.year in it.from..it.to }) &&
                 (words.isEmpty() || matches(f, words))
         }.shuffled().map { item(it) }
-        if (items.isEmpty()) HeroRepo.lastResult[HeroRepo.SRC_ART] = "No paintings matched. Loosen the filters or add painters."
+        if (items.isEmpty()) HeroRepo.lastResult[src] = "No paintings matched. Loosen the filters or add painters."
         return items
     }
 

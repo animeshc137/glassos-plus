@@ -265,50 +265,72 @@ object SourcePages {
 
     // ---------- Art ----------
 
+    /** One set of Art filters: the wallpaper's, or the screensaver's own. */
+    private class Filt(val prefs: Prefs, val saver: Boolean) {
+        val src: String get() = if (saver) HeroRepo.SRC_ARTSAVER else HeroRepo.SRC_ART
+        var genres: List<String>
+            get() = if (saver) prefs.saverGenres else prefs.artGenres
+            set(v) { if (saver) prefs.saverGenres = v else prefs.artGenres = v }
+        var eras: List<String>
+            get() = if (saver) prefs.saverEras else prefs.artEras
+            set(v) { if (saver) prefs.saverEras = v else prefs.artEras = v }
+        var styles: List<String>
+            get() = if (saver) prefs.saverStyles else prefs.artStyles
+            set(v) { if (saver) prefs.saverStyles = v else prefs.artStyles = v }
+        var artists: List<String>
+            get() = if (saver) prefs.saverArtists else prefs.artArtists
+            set(v) { if (saver) prefs.saverArtists = v else prefs.artArtists = v }
+        var count: Int
+            get() = if (saver) prefs.saverCount else prefs.artCount
+            set(v) { if (saver) prefs.saverCount = v else prefs.artCount = v }
+        fun clear() { genres = emptyList(); eras = emptyList(); styles = emptyList(); artists = emptyList() }
+    }
+
+    /** Subject, Age, Movement, Painters, clearing them and how many to keep: the same rows for the wallpaper and the screensaver. */
+    private fun filterRows(b: PageBuilder, f: Filt) {
+        b.sub("Subject", { summary(f.genres) }) { genres(f) }
+        b.sub("Age", { summary(f.eras) }) { eras(f) }
+        b.sub("Movement", { summary(f.styles) }) { styles(f) }
+        b.sub("Painters", { summary(f.artists) }) { painters(f) }
+        b.action("Clear all filters", "›") { _ ->
+            f.clear()
+            b.host.changed(f.src)
+            b.host.rebuild()
+        }
+        b.choice("Paintings to keep", ArtRepo.COUNTS.map { it.toString() to "$it" }, { f.count.toString() }, { f.count = it.toInt() },
+            after = { b.host.changed(f.src) })
+    }
+
     fun art(): Page = Page("Art paintings") {
         val p = act.prefs
         note("Famous paintings: the public-domain scans Google Arts & Culture made of museum paintings, as kept on Wikimedia Commons. Tick nothing to see a mix of famous painters.")
         useAsBackground(this, HeroRepo.SRC_ART)
-        sub("Subject", { summary(p.artGenres) }) { genres() }
-        sub("Age", { summary(p.artEras) }) { eras() }
-        sub("Movement", { summary(p.artStyles) }) { styles() }
-        sub("Painters", { summary(p.artArtists) }) { painters() }
-        action("Clear all filters", "›") { _ ->
-            p.artGenres = emptyList(); p.artEras = emptyList(); p.artStyles = emptyList(); p.artArtists = emptyList()
-            host.changed(HeroRepo.SRC_ART)
-            host.rebuild()
-        }
-        choice("Paintings to keep", ArtRepo.COUNTS.map { it.toString() to "$it" }, { p.artCount.toString() }, { p.artCount = it.toInt() },
-            after = { host.changed(HeroRepo.SRC_ART) })
+        filterRows(this, Filt(p, false))
         choice("Refresh every", hoursOptions(ArtRepo.REFRESH_HOURS), { p.artRefreshHours.toString() }, { p.artRefreshHours = it.toInt() })
         action("Refresh now", "›") { r -> refreshNow(this, HeroRepo.SRC_ART, r) }
         sub("Screensaver", { if (screensaverActive(act)) "On" else "Off" }) { screensaver() }
         HeroRepo.lastResult[HeroRepo.SRC_ART]?.let { note("Last refresh: $it") }
     }
 
-    private fun genres(): Page = Page("Subject") {
-        val p = act.prefs
+    private fun genres(f: Filt): Page = Page("Subject") {
         note("What the painting shows, guessed from words in its title and categories. Choose several to mix them.")
-        pick(this, ArtRepo.GENRES.map { it.first to it.first }, { p.artGenres }, { p.artGenres = it }, null, TextInput.Kind.PLAIN, { it }, { it }, HeroRepo.SRC_ART)
+        pick(this, ArtRepo.GENRES.map { it.first to it.first }, { f.genres }, { f.genres = it }, null, TextInput.Kind.PLAIN, { it }, { it }, f.src)
     }
 
-    private fun eras(): Page = Page("Age") {
-        val p = act.prefs
+    private fun eras(f: Filt): Page = Page("Age") {
         note("When the painting was made.")
-        pick(this, ArtRepo.ERAS.map { it.label to it.label }, { p.artEras }, { p.artEras = it }, null, TextInput.Kind.PLAIN, { it }, { it }, HeroRepo.SRC_ART)
+        pick(this, ArtRepo.ERAS.map { it.label to it.label }, { f.eras }, { f.eras = it }, null, TextInput.Kind.PLAIN, { it }, { it }, f.src)
     }
 
-    private fun styles(): Page = Page("Movement") {
-        val p = act.prefs
+    private fun styles(f: Filt): Page = Page("Movement") {
         note("Shows the famous painters of that movement (pick painters too to narrow it).")
-        pick(this, ArtRepo.MOVEMENTS.map { it.first to it.first }, { p.artStyles }, { p.artStyles = it }, null, TextInput.Kind.PLAIN, { it }, { it }, HeroRepo.SRC_ART)
+        pick(this, ArtRepo.MOVEMENTS.map { it.first to it.first }, { f.styles }, { f.styles = it }, null, TextInput.Kind.PLAIN, { it }, { it }, f.src)
     }
 
-    private fun painters(): Page = Page("Painters") {
-        val p = act.prefs
+    private fun painters(f: Filt): Page = Page("Painters") {
         note("OK ticks a painter. Type any other painter's name and press Done to add them.")
-        pick(this, ArtRepo.ARTISTS.map { it to it }, { p.artArtists }, { p.artArtists = it },
-            "Add a painter, e.g. Katsushika Hokusai", TextInput.Kind.ARTIST, { t -> t.trim().replace("|", " ").takeIf { it.length >= 3 } }, { it }, HeroRepo.SRC_ART)
+        pick(this, ArtRepo.ARTISTS.map { it to it }, { f.artists }, { f.artists = it },
+            "Add a painter, e.g. Katsushika Hokusai", TextInput.Kind.ARTIST, { t -> t.trim().replace("|", " ").takeIf { it.length >= 3 } }, { it }, f.src)
     }
 
     // ---------- Screensaver ----------
@@ -322,7 +344,7 @@ object SourcePages {
 
     fun screensaver(): Page = Page("Art screensaver") {
         val p = act.prefs
-        note("Shows the paintings full screen, one at a time, like a framed picture. It uses the Art filters, whatever the background is.")
+        note("Shows famous paintings one at a time, full screen. Turn Frame on to see each one framed, with its title below.")
         action("Make it the screensaver", if (screensaverActive(act)) "Active" else "›") { r ->
             r.valueView.text = "Working…"
             Thread {
@@ -342,9 +364,24 @@ object SourcePages {
         action("Preview now") { _ ->
             act.ctx.startActivity(Intent(act.ctx, ArtPreviewActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
+        toggle("Frame", { p.saverFrame }) { p.saverFrame = it }
         choice("Change painting every", ArtRepo.SAVER_SECONDS.map { it.toString() to seconds(it) }, { p.saverSeconds.toString() }, { p.saverSeconds = it.toInt() })
         toggle("Show title and painter", { p.saverCaption }) { p.saverCaption = it }
         toggle("Show clock", { p.saverClock }) { p.saverClock = it }
-        note("When it starts is set by Android: Settings > Device Preferences > Screen saver. \"Make it the screensaver\" picks it there for you over the TV's own ADB. Fire TV may not allow third-party screensavers.")
+        toggle("Same filters as the Art wallpaper", { p.saverSameFilters }) {
+            p.saverSameFilters = it
+            host.changed(HeroRepo.SRC_ARTSAVER)
+            host.rebuild()
+        }
+        val saverSrc = if (p.saverSameFilters) HeroRepo.SRC_ART else HeroRepo.SRC_ARTSAVER
+        if (p.saverSameFilters) {
+            note("The screensaver shows the same paintings as the Art wallpaper. Change them under Art paintings.")
+        } else {
+            note("Filters for the screensaver only. They work like the Art wallpaper's.")
+            filterRows(this, Filt(p, true))
+        }
+        action("Refresh now", "›") { r -> refreshNow(this, saverSrc, r) }
+        HeroRepo.lastResult[saverSrc]?.let { note("Last refresh: $it") }
+        note("When it starts is set by Android: Settings > Device Preferences > Screen saver. 'Make it the screensaver' picks it there for you over the TV's own ADB. Fire TV may not allow third-party screensavers.")
     }
 }

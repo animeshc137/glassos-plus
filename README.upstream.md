@@ -190,10 +190,11 @@ Choose in Settings > Top Shelf:
 
 ### Art screensaver
 
-Settings > Art paintings > Screensaver (or Settings > Art screensaver) shows the same paintings full screen as a
-framed picture with the title and painter, changing every 10 seconds to 15 minutes. Android starts it when idle once it
-is chosen under Settings > Device Preferences > Screen saver; "Make it the screensaver" does that over the TV's own ADB.
-Fire TV may not allow third-party screensavers.
+Settings > Art screensaver shows famous paintings full screen, one at a time, changing every 10 seconds to 15 minutes,
+with the title and painter bottom left. "Frame" shows each painting framed on a dark backdrop instead. It has the same
+filters as the Art wallpaper (subject, age, movement, painters), either its own set or, with "Same filters as the Art
+wallpaper", the wallpaper's. Android starts it when idle once it is chosen under Settings > Device Preferences >
+Screen saver; "Make it the screensaver" does that over the TV's own ADB. Fire TV may not allow third-party screensavers.
 
 When a source has no art (no network, no key), the background chosen under "When Top Shelf art is unavailable" is
 shown.

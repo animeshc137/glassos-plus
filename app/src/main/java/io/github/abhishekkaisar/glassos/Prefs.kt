@@ -170,6 +170,36 @@ class Prefs(ctx: Context) {
         get() = sp.getInt("saverSeconds", 60)
         set(v) { sp.edit().putInt("saverSeconds", v).apply() }
 
+    /** Show each painting in a frame on a dark backdrop; off: the painting fills the screen. */
+    var saverFrame: Boolean
+        get() = sp.getBoolean("saverFrame", false)
+        set(v) { sp.edit().putBoolean("saverFrame", v).apply() }
+
+    /** Use the Art wallpaper's filters (one shared set of paintings); off: the screensaver's own filters below. */
+    var saverSameFilters: Boolean
+        get() = sp.getBoolean("saverSameFilters", false)
+        set(v) { sp.edit().putBoolean("saverSameFilters", v).apply() }
+
+    var saverGenres: List<String>
+        get() = list("saverGenres", emptyList())
+        set(v) = putList("saverGenres", v)
+
+    var saverEras: List<String>
+        get() = list("saverEras", emptyList())
+        set(v) = putList("saverEras", v)
+
+    var saverStyles: List<String>
+        get() = list("saverStyles", emptyList())
+        set(v) = putList("saverStyles", v)
+
+    var saverArtists: List<String>
+        get() = list("saverArtists", emptyList())
+        set(v) = putList("saverArtists", v)
+
+    var saverCount: Int
+        get() = sp.getInt("saverCount", 24)
+        set(v) { sp.edit().putInt("saverCount", v).apply() }
+
     var saverCaption: Boolean
         get() = sp.getBoolean("saverCaption", true)
         set(v) { sp.edit().putBoolean("saverCaption", v).apply() }
