@@ -156,6 +156,7 @@ object HeroRepo {
         if (src == SRC_SCENES) return false
         val d = dir(ctx, src)
         try { File(d, "attempt").writeText(System.currentTimeMillis().toString()) } catch (e: Throwable) { }
+        lastResult.remove(src)
         val items = when (src) {
             SRC_CINEMETA -> Cinemeta.fetch(Prefs(ctx).catalogContent, cachedTitles(ctx, src).map { it.key.removePrefix("t:") }.toSet())
             SRC_TMDB -> Tmdb.fetch(ctx)
@@ -163,10 +164,21 @@ object HeroRepo {
             SRC_ART -> ArtRepo.fetch(Prefs(ctx))
             else -> appleItems(d) ?: return false
         }
-        val changed = store(d, items, if (src == SRC_APPLE) "us" else Prefs(ctx).country)
+        val keep = when (src) {
+            SRC_REDDIT -> Prefs(ctx).redditCount
+            SRC_ART -> Prefs(ctx).artCount
+            else -> Int.MAX_VALUE
+        }
+        val changed = store(d, items, if (src == SRC_APPLE) "us" else Prefs(ctx).country, keep)
         if (src == SRC_REDDIT || src == SRC_ART) {
             // The fetchers say why they found nothing (offline, blocked, filters too strict) in lastResult.
-            lastResult[src] = if (changed) "${cachedTitles(ctx, src).size} images" else lastResult[src] ?: "Nothing found"
+            val why = lastResult[src]
+            lastResult[src] = when {
+                changed -> "${cachedTitles(ctx, src).size} images"
+                why != null -> why
+                items.isEmpty() -> "Nothing found"
+                else -> "Found ${items.size} but none could be downloaded or were big enough"
+            }
         }
         if (changed && src == SRC_CINEMETA) {
             File(d, "catalog-v3").writeText("3")
@@ -197,14 +209,15 @@ object HeroRepo {
         return try { parse(text) } catch (e: Throwable) { null }
     }
 
-    private fun store(d: File, items: List<Item>, region: String): Boolean {
+    private fun store(d: File, items: List<Item>, region: String, max: Int = Int.MAX_VALUE): Boolean {
         if (items.isEmpty()) return false
         val out = JSONArray()
         val keep = HashSet<String>()
         for (it in items) {
+            if (out.length() >= max) break
             val base = it.id.replace(Regex("[^A-Za-z0-9.]"), "_")
             val art = File(d, if (it.id.startsWith("cinemeta_")) "${base}_hq.jpg" else "$base.jpg")
-            if (!art.exists() && !downloadArt(it.art, art)) continue
+            if (!art.exists() && !downloadArt(it, art)) continue
             keep.add(art.name)
             var logo: File? = null
             if (it.logo != null) {
@@ -230,7 +243,11 @@ object HeroRepo {
 
     class Item(val id: String, val title: String, val subtitle: String, val url: String, val art: String, val logo: String?, val pkg: String? = null,
         /** [Slide.TITLE] (title, logo, Open) or [Slide.PHOTO] (just the picture, with a slow zoom). */
-        val kind: Int = Slide.TITLE)
+        val kind: Int = Slide.TITLE,
+        /** Reject the downloaded picture when it is narrower than this (0: no limit). */
+        val minWidth: Int = 0,
+        /** Measure the downloaded picture and reject portrait ones (the source gave no size). */
+        val verify: Boolean = false)
 
     private fun fill(template: String, w: Int, h: Int, c: String, f: String) =
         template.replace("{w}", w.toString()).replace("{h}", h.toString()).replace("{c}", c).replace("{f}", f)
@@ -311,8 +328,15 @@ object HeroRepo {
     } catch (e: Throwable) { false }
 
     /** [download] for wallpapers: pictures wider than [MAX_ART_W] (Reddit has 8K ones) are shrunk to keep the cache small. */
-    private fun downloadArt(url: String, to: File): Boolean {
-        if (!download(url, to)) return false
+    private fun downloadArt(item: Item, to: File): Boolean {
+        if (!download(item.art, to)) return false
+        if (item.minWidth > 0 || item.verify) {
+            val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            try { BitmapFactory.decodeFile(to.path, o) } catch (e: Throwable) { }
+            val w = o.outWidth
+            val h = o.outHeight
+            if (w <= 0 || h <= 0 || w < item.minWidth || (item.verify && w * 10 < h * 13)) { to.delete(); return false }
+        }
         shrink(to)
         return true
     }

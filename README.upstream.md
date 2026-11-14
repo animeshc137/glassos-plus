@@ -179,11 +179,13 @@ Choose in Settings > Top Shelf:
   it may stop working at any time.
 - **Reddit wallpapers**: pictures from the subreddits you tick (EarthPorn, CityPorn, SpacePorn, wallpapers and more)
   or add by name. Settings > Reddit wallpapers sets Hot / New / Top / Rising (and the period for Top), how many
-  pictures to keep, the smallest size, and how often to refresh. NSFW posts, videos and portrait pictures are
-  skipped. Uses Reddit's public listing, so no account; Reddit may refuse or rate-limit it.
-- **Art (museum paintings)**: famous paintings from the [Art Institute of Chicago's open collection](https://api.artic.edu/docs/)
-  (public domain; Google Arts & Culture has no public feed). Settings > Art paintings filters by subject, age,
-  movement and painter (pick from famous ones or add any name), with "Highlights only" for the museum's best-known works.
+  pictures to keep, the smallest size, and how often to refresh. Videos, galleries and portrait pictures are
+  skipped. Uses each subreddit's public RSS feed, so no account; Reddit's feed does not mark NSFW posts, so add only
+  safe-for-work subreddits, and Reddit may rate-limit the TV for a few minutes.
+- **Art (museum paintings)**: the public-domain scans Google Arts & Culture made of museum paintings, as kept on
+  [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Google_Art_Project) (Google has no public feed).
+  Settings > Art paintings filters by painter (pick famous ones or add any name), movement, age and subject (the
+  subject is guessed from the title, so it is approximate).
 - **Built-in scenes**: no network at all.
 
 ### Art screensaver

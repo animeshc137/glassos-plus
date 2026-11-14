@@ -145,7 +145,7 @@ class Prefs(ctx: Context) {
         get() = list("artEras", emptyList())
         set(v) = putList("artEras", v)
 
-    /** Movements, e.g. "Impressionism" (see [ArtRepo.STYLES]); empty: any. */
+    /** Movements, e.g. "Impressionism" (see [ArtRepo.MOVEMENTS]); empty: any. */
     var artStyles: List<String>
         get() = list("artStyles", emptyList())
         set(v) = putList("artStyles", v)
@@ -154,11 +154,6 @@ class Prefs(ctx: Context) {
     var artArtists: List<String>
         get() = list("artArtists", emptyList())
         set(v) = putList("artArtists", v)
-
-    /** Only the museum's highlights (its best-known works). */
-    var artHighlights: Boolean
-        get() = sp.getBoolean("artHighlights", true)
-        set(v) { sp.edit().putBoolean("artHighlights", v).apply() }
 
     var artCount: Int
         get() = sp.getInt("artCount", 24)

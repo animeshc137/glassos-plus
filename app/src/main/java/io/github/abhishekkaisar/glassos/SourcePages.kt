@@ -240,7 +240,7 @@ object SourcePages {
 
     fun reddit(): Page = Page("Reddit wallpapers") {
         val p = act.prefs
-        note("Pictures from the subreddits you choose, like Projectivy. Posts marked NSFW, videos and portrait pictures are always skipped.")
+        note("Pictures from the subreddits you choose, like Projectivy. Videos, galleries and portrait pictures are skipped. Reddit does not mark NSFW posts in its feed, so only add safe-for-work subreddits.")
         useAsBackground(this, HeroRepo.SRC_REDDIT)
         sub("Subreddits", { summary(p.redditSubs.map { "r/$it" }) }) { subreddits() }
         choice("Sort by", RedditRepo.SORTS, { p.redditSort }, { p.redditSort = it }, after = { host.changed(HeroRepo.SRC_REDDIT); host.rebuild() })
@@ -267,9 +267,8 @@ object SourcePages {
 
     fun art(): Page = Page("Art paintings") {
         val p = act.prefs
-        note("Famous paintings from the Art Institute of Chicago's open collection (public domain). Google Arts & Culture has no public feed, so this museum stands in. Tick nothing to see everything.")
+        note("Famous paintings: the public-domain scans Google Arts & Culture made of museum paintings, as kept on Wikimedia Commons. Tick nothing to see a mix of famous painters.")
         useAsBackground(this, HeroRepo.SRC_ART)
-        toggle("Highlights only", { p.artHighlights }) { p.artHighlights = it; host.changed(HeroRepo.SRC_ART) }
         sub("Subject", { summary(p.artGenres) }) { genres() }
         sub("Age", { summary(p.artEras) }) { eras() }
         sub("Movement", { summary(p.artStyles) }) { styles() }
@@ -289,7 +288,7 @@ object SourcePages {
 
     private fun genres(): Page = Page("Subject") {
         val p = act.prefs
-        note("What the painting shows. Choose several to mix them.")
+        note("What the painting shows, guessed from words in its title and categories. Choose several to mix them.")
         pick(this, ArtRepo.GENRES.map { it.first to it.first }, { p.artGenres }, { p.artGenres = it }, null, TextInput.Kind.PLAIN, { it }, { it }, HeroRepo.SRC_ART)
     }
 
@@ -301,8 +300,8 @@ object SourcePages {
 
     private fun styles(): Page = Page("Movement") {
         val p = act.prefs
-        note("The art movement or school.")
-        pick(this, ArtRepo.STYLES.map { it to it }, { p.artStyles }, { p.artStyles = it }, null, TextInput.Kind.PLAIN, { it }, { it }, HeroRepo.SRC_ART)
+        note("Shows the famous painters of that movement (pick painters too to narrow it).")
+        pick(this, ArtRepo.MOVEMENTS.map { it.first to it.first }, { p.artStyles }, { p.artStyles = it }, null, TextInput.Kind.PLAIN, { it }, { it }, HeroRepo.SRC_ART)
     }
 
     private fun painters(): Page = Page("Painters") {

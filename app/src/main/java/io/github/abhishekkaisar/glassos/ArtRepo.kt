@@ -1,31 +1,35 @@
 package io.github.abhishekkaisar.glassos.personal
 
-import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
+import java.net.URLEncoder
 
 /**
- * Famous paintings as a background and screensaver, in the spirit of Samsung's Frame TV. Google Arts & Culture has
- * no public interface, so the paintings come from the Art Institute of Chicago's open collection
- * (api.artic.edu, public-domain works only, free images). The pictures are filtered by what the user ticks in
- * Settings: subject, age, movement and painter. Only landscape-shaped paintings are kept (the home is 16:9).
+ * Famous paintings as a background and screensaver, in the spirit of Samsung's Frame TV. The pictures are the
+ * high-resolution public-domain scans Google Arts & Culture's Art Project made of museum paintings, as kept on
+ * Wikimedia Commons ("Google Art Project works by <painter>"). Google Arts & Culture itself has no public feed.
+ *
+ * The filters work like this:
+ * - Painters: the painters ticked (or typed) in Settings; none ticked means a random pick of famous ones.
+ * - Movement: the famous painters of that movement ([MOVEMENTS]); combined with painters, both must apply.
+ * - Age: the year the painting was made, from its Commons record.
+ * - Subject: words in the painting's title and Commons categories ([GENRES]). This is a best guess, not a catalogue.
+ * Only landscape-shaped scans (the home is 16:9) of at least 1600 px are kept.
  */
 object ArtRepo {
-    /** Subject to the words that find it in the museum's subject, term and title fields. */
+    /** Subject to the words that mark it in a painting's title or categories. */
     val GENRES = listOf(
-        "Landscape" to "landscape landscapes",
-        "Portrait" to "portrait portraits",
-        "Still life" to "still life",
-        "Seascape" to "seascape seascapes marine sea ships harbor",
-        "Cityscape" to "cityscape cityscapes city street urban town",
-        "Flowers and gardens" to "flowers garden gardens floral",
-        "Animals" to "animal animals horse horses dog cat bird birds",
-        "Mythology" to "mythology myth mythological",
-        "Religion" to "religion religious christ madonna saint",
-        "Everyday life" to "genre scene scenes daily life interior domestic",
-        "Winter and snow" to "winter snow",
-        "Abstract" to "abstract abstraction"
+        "Landscape" to listOf("landscape", "valley", "mountain", "hills", "meadow", "fields", "forest", "woods", "river", "lake", "countryside", "sunset", "sunrise", "view of", "view from"),
+        "Seascape" to listOf("sea", "ship", "boat", "harbor", "harbour", "coast", "beach", "shore", "marine", "storm", "waves", "sailing", "fishing"),
+        "Portrait" to listOf("portrait", "self-portrait", "lady", "woman", "girl", "boy", "madame", "mrs.", "young man", "old man"),
+        "Still life" to listOf("still life", "still-life", "fruit", "apples", "bowl", "vase", "table", "bottle"),
+        "Flowers and gardens" to listOf("flower", "garden", "iris", "sunflower", "roses", "lilies", "lily", "bouquet", "poppies", "poppy", "blossom"),
+        "Cityscape" to listOf("city", "street", "boulevard", "paris", "london", "venice", "bridge", "canal", "village", "town", "cathedral", "square"),
+        "Animals" to listOf("horse", "dog", "cat", "bird", "cow", "sheep", "lion", "stag", "deer", "hunt"),
+        "Mythology" to listOf("venus", "apollo", "diana", "bacchus", "cupid", "jupiter", "hercules", "perseus", "nymph", "minerva", "mythology", "myth"),
+        "Religion" to listOf("madonna", "christ", "saint", "virgin", "crucifixion", "annunciation", "nativity", "holy", "adoration", "angel", "resurrection", "last supper", "pietà"),
+        "Everyday life" to listOf("peasant", "dance", "café", "cafe", "tavern", "kitchen", "market", "interior", "concert", "reading", "harvest", "farm", "wedding"),
+        "Winter and snow" to listOf("snow", "winter", "ice", "skaters", "frozen"),
+        "Abstract" to listOf("composition", "abstract", "improvisation", "impression")
     )
 
     class Era(val label: String, val from: Int, val to: Int)
@@ -39,117 +43,165 @@ object ArtRepo {
         Era("Postwar and contemporary 1950 on", 1950, 2100)
     )
 
-    val STYLES = listOf(
-        "Impressionism", "Post-Impressionism", "Romanticism", "Realism", "Baroque", "Rococo", "Neoclassicism",
-        "Expressionism", "Cubism", "Surrealism", "Symbolism", "Fauvism", "Pointillism", "Art Nouveau",
-        "Abstract Expressionism", "Pop art", "Hudson River School", "Renaissance"
+    /** Movement to its famous painters, spelled as the preset list below spells them. */
+    val MOVEMENTS = listOf(
+        "Renaissance" to listOf("Leonardo da Vinci", "Sandro Botticelli", "Raphael", "Titian", "Jan van Eyck", "Pieter Bruegel the Elder", "Albrecht Dürer", "El Greco"),
+        "Baroque" to listOf("Rembrandt", "Johannes Vermeer", "Frans Hals", "Peter Paul Rubens", "Caravaggio", "Diego Velázquez", "Claude Lorrain", "Nicolas Poussin", "Jan Steen", "Pieter de Hooch", "Canaletto"),
+        "Dutch Golden Age" to listOf("Rembrandt", "Johannes Vermeer", "Frans Hals", "Jan Steen", "Pieter de Hooch"),
+        "Rococo" to listOf("Jean-Honoré Fragonard", "Canaletto"),
+        "Neoclassicism" to listOf("Jacques-Louis David"),
+        "Romanticism" to listOf("Caspar David Friedrich", "Eugène Delacroix", "J. M. W. Turner", "John Constable", "Francisco Goya", "Ivan Aivazovsky", "Thomas Cole", "Albert Bierstadt", "Frederic Edwin Church"),
+        "Hudson River School" to listOf("Thomas Cole", "Albert Bierstadt", "Frederic Edwin Church"),
+        "Realism" to listOf("Gustave Courbet", "Jean-François Millet", "Winslow Homer", "John Singer Sargent"),
+        "Impressionism" to listOf("Claude Monet", "Pierre-Auguste Renoir", "Edgar Degas", "Édouard Manet", "Camille Pissarro", "Alfred Sisley", "Mary Cassatt", "Berthe Morisot", "Gustave Caillebotte", "Joaquín Sorolla"),
+        "Post-Impressionism" to listOf("Vincent van Gogh", "Paul Cézanne", "Paul Gauguin", "Georges Seurat", "Paul Signac"),
+        "Symbolism and Art Nouveau" to listOf("Gustav Klimt", "Edvard Munch", "Odilon Redon", "Vilhelm Hammershøi"),
+        "Expressionism and abstraction" to listOf("Wassily Kandinsky", "Edvard Munch", "Henri Matisse"),
+        "Ukiyo-e (Japan)" to listOf("Katsushika Hokusai", "Utagawa Hiroshige")
     )
 
-    /** Famous painters, written as the museum writes them. Anyone else can be added by name in Settings. */
+    /** Famous painters, spelled as their "Google Art Project works by ..." category on Commons. */
     val ARTISTS = listOf(
         "Claude Monet", "Vincent van Gogh", "Pierre-Auguste Renoir", "Edgar Degas", "Georges Seurat", "Paul Cézanne",
-        "Paul Gauguin", "Édouard Manet", "Camille Pissarro", "Mary Cassatt", "Berthe Morisot", "Gustave Caillebotte",
-        "Edward Hopper", "Georgia O'Keeffe", "Winslow Homer", "Thomas Cole", "John Singer Sargent", "James McNeill Whistler",
-        "J. M. W. Turner", "John Constable", "Caspar David Friedrich", "Gustave Courbet", "Jean-François Millet",
-        "Rembrandt van Rijn", "Johannes Vermeer", "Francisco de Goya", "El Greco", "Canaletto", "Henri Matisse",
-        "Pablo Picasso", "Marc Chagall", "Wassily Kandinsky", "Piet Mondrian", "Odilon Redon", "Paul Signac"
+        "Paul Gauguin", "Édouard Manet", "Camille Pissarro", "Alfred Sisley", "Mary Cassatt", "Berthe Morisot",
+        "Gustave Caillebotte", "Paul Signac", "Winslow Homer", "John Singer Sargent", "Thomas Cole", "Albert Bierstadt",
+        "Frederic Edwin Church", "J. M. W. Turner", "John Constable", "Caspar David Friedrich", "Eugène Delacroix",
+        "Gustave Courbet", "Jean-François Millet", "Rembrandt", "Johannes Vermeer", "Frans Hals", "Jan Steen",
+        "Pieter de Hooch", "Peter Paul Rubens", "Caravaggio", "Diego Velázquez", "El Greco", "Francisco Goya",
+        "Titian", "Leonardo da Vinci", "Sandro Botticelli", "Raphael", "Jan van Eyck", "Albrecht Dürer",
+        "Pieter Bruegel the Elder", "Nicolas Poussin", "Claude Lorrain", "Canaletto", "Jean-Honoré Fragonard",
+        "Jacques-Louis David", "Gustav Klimt", "Edvard Munch", "Odilon Redon", "Wassily Kandinsky", "Henri Matisse",
+        "Katsushika Hokusai", "Utagawa Hiroshige", "Ivan Aivazovsky", "Joaquín Sorolla", "Vilhelm Hammershøi"
+    )
+
+    /** Who is shown when no painter or movement is chosen. */
+    private val DEFAULT_POOL = listOf(
+        "Claude Monet", "Vincent van Gogh", "Pierre-Auguste Renoir", "Edgar Degas", "Paul Cézanne", "Paul Gauguin",
+        "Édouard Manet", "Camille Pissarro", "Alfred Sisley", "Winslow Homer", "John Constable", "Caspar David Friedrich",
+        "Gustave Courbet", "Rembrandt", "Johannes Vermeer", "Frans Hals", "El Greco", "Caravaggio", "Titian",
+        "Peter Paul Rubens", "Pieter Bruegel the Elder", "Katsushika Hokusai", "Utagawa Hiroshige", "Gustav Klimt",
+        "Edvard Munch", "Joaquín Sorolla", "Frederic Edwin Church", "Albert Bierstadt", "Thomas Cole", "John Singer Sargent",
+        "Eugène Delacroix", "Nicolas Poussin", "Claude Lorrain", "Ivan Aivazovsky", "Vilhelm Hammershøi"
     )
 
     val COUNTS = listOf(12, 24, 48)
     val REFRESH_HOURS = listOf(6, 24, 72, 168)
     val SAVER_SECONDS = listOf(10, 30, 60, 300, 900)
 
-    private const val API = "https://api.artic.edu/api/v1/artworks/search"
-    private const val IIIF = "https://www.artic.edu/iiif/2"
-    private const val PAGE = 100
-    private const val MAX_PAGE = 10
-    private val FIELDS = JSONArray(listOf("id", "title", "artist_title", "date_display", "image_id", "thumbnail"))
+    private const val API = "https://commons.wikimedia.org/w/api.php"
+    private const val MIN_WIDTH = 1600
+    private const val PAINTERS_PER_REFRESH = 6
+    private val YEAR = Regex("\\b(\\d{3,4})\\b")
+    private val TAGS = Regex("<[^>]*>")
+
+    /** One painting found on Commons, before the filters. */
+    private class Found(val id: Long, val file: String, val painter: String, val width: Int, val height: Int,
+                         val thumb: String, val page: String, val year: Int?, val categories: String)
 
     /** Fetches paintings that match the filters. Returns an empty list (and sets [HeroRepo.lastResult]) when there are none. */
     fun fetch(prefs: Prefs): List<HeroRepo.Item> {
-        val want = prefs.artCount
-        var failure: String? = null
-        // Highlights first; if the museum has none for these filters, any matching painting.
-        for (highlights in if (prefs.artHighlights) listOf(true, false) else listOf(false)) {
-            val body = query(prefs, highlights)
-            val (code0, text0) = post(JSONObject(body.toString()).put("fields", JSONArray(listOf("id"))).put("limit", 1).toString())
-            if (code0 != 200 || text0 == null) { failure = describe(code0); break }
-            val total = try { JSONObject(text0).getJSONObject("pagination").getInt("total") } catch (e: Throwable) { 0 }
-            if (total <= 0) continue
-            val pages = ((total + PAGE - 1) / PAGE).coerceIn(1, MAX_PAGE)
-            val order = (1..pages).shuffled().take(3)
-            val found = LinkedHashMap<String, HeroRepo.Item>()
-            for (p in order) {
-                val (code, text) = post(JSONObject(body.toString()).put("fields", FIELDS).put("limit", PAGE).put("page", p).toString())
-                if (code != 200 || text == null) { failure = describe(code); break }
-                val data = try { JSONObject(text).getJSONArray("data") } catch (e: Throwable) { continue }
-                for (i in 0 until data.length()) item(data.optJSONObject(i))?.let { if (!found.containsKey(it.id)) found[it.id] = it }
-                if (found.size >= want * 2) break
-            }
-            if (found.isNotEmpty()) return found.values.shuffled().take(want)
-            if (failure != null) break
+        val chosen = prefs.artArtists
+        val fromMovements = prefs.artStyles.flatMap { s -> MOVEMENTS.firstOrNull { it.first == s }?.second ?: emptyList() }.distinct()
+        val painters: List<String> = when {
+            chosen.isNotEmpty() && fromMovements.isNotEmpty() -> chosen.filter { c -> fromMovements.any { it.equals(c, true) } }
+            chosen.isNotEmpty() -> chosen
+            fromMovements.isNotEmpty() -> fromMovements
+            else -> DEFAULT_POOL
         }
-        HeroRepo.lastResult[HeroRepo.SRC_ART] = failure ?: "No paintings matched. Loosen the filters."
-        return emptyList()
+        if (painters.isEmpty()) {
+            HeroRepo.lastResult[HeroRepo.SRC_ART] = "None of the chosen painters belongs to the chosen movements"
+            return emptyList()
+        }
+        val eras = prefs.artEras.mapNotNull { e -> ERAS.firstOrNull { it.label == e } }
+        val words = prefs.artGenres.flatMap { g -> GENRES.firstOrNull { it.first == g }?.second ?: emptyList() }.map { it.lowercase() }
+        val found = LinkedHashMap<Long, Found>()
+        var reached = false
+        for ((i, painter) in painters.shuffled().take(PAINTERS_PER_REFRESH).withIndex()) {
+            if (i > 0) Thread.sleep(400)
+            val (code, files) = category(painter)
+            if (code == 200) reached = true
+            val list = if (files.isEmpty() && code == 200) { Thread.sleep(400); search(painter) } else files
+            for (f in list) if (!found.containsKey(f.id)) found[f.id] = f
+        }
+        if (!reached) {
+            HeroRepo.lastResult[HeroRepo.SRC_ART] = "Could not reach commons.wikimedia.org"
+            return emptyList()
+        }
+        val items = found.values.filter { f ->
+            f.width >= MIN_WIDTH && f.width * 100 >= f.height * 115 &&
+                (eras.isEmpty() || f.year != null && eras.any { f.year in it.from..it.to }) &&
+                (words.isEmpty() || matches(f, words))
+        }.shuffled().map { item(it) }
+        if (items.isEmpty()) HeroRepo.lastResult[HeroRepo.SRC_ART] = "No paintings matched. Loosen the filters or add painters."
+        return items
     }
 
-    private fun describe(code: Int) = if (code == -1) "Could not reach api.artic.edu" else "The museum answered HTTP $code"
-
-    /** The Elasticsearch body for the ticked filters: every group must match, and within a group any choice may. */
-    private fun query(prefs: Prefs, highlights: Boolean): JSONObject {
-        val must = JSONArray()
-        must.put(JSONObject().put("term", JSONObject().put("is_public_domain", true)))
-        must.put(JSONObject().put("match_phrase", JSONObject().put("artwork_type_title", "Painting")))
-        must.put(JSONObject().put("exists", JSONObject().put("field", "image_id")))
-        if (highlights) must.put(JSONObject().put("term", JSONObject().put("is_boosted", true)))
-        anyOf(prefs.artGenres.mapNotNull { g -> GENRES.firstOrNull { it.first == g }?.second }.map { words ->
-            JSONObject().put("multi_match", JSONObject().put("query", words).put("fields", JSONArray(listOf("subject_titles", "term_titles", "title"))))
-        })?.let { must.put(it) }
-        anyOf(prefs.artEras.mapNotNull { e -> ERAS.firstOrNull { it.label == e } }.map { e ->
-            JSONObject().put("range", JSONObject().put("date_start", JSONObject().put("gte", e.from).put("lte", e.to)))
-        })?.let { must.put(it) }
-        anyOf(prefs.artStyles.map { s ->
-            JSONObject().put("multi_match", JSONObject().put("query", s).put("type", "phrase").put("fields", JSONArray(listOf("style_titles", "term_titles"))))
-        })?.let { must.put(it) }
-        anyOf(prefs.artArtists.filter { it.isNotBlank() }.map { a ->
-            JSONObject().put("multi_match", JSONObject().put("query", a).put("operator", "and").put("fields", JSONArray(listOf("artist_title", "artist_display"))))
-        })?.let { must.put(it) }
-        return JSONObject().put("query", JSONObject().put("bool", JSONObject().put("must", must)))
+    private fun matches(f: Found, words: List<String>): Boolean {
+        val text = (title(f.file, f.painter) + " " + f.categories).lowercase()
+        return words.any { text.contains(it) }
     }
 
-    private fun anyOf(clauses: List<JSONObject>): JSONObject? {
-        if (clauses.isEmpty()) return null
-        return JSONObject().put("bool", JSONObject().put("should", JSONArray(clauses)).put("minimum_should_match", 1))
+    private fun item(f: Found): HeroRepo.Item {
+        val artist = artist(f.file, f.painter)
+        return HeroRepo.Item("art_${f.id}", title(f.file, f.painter), if (f.year != null) "$artist, ${f.year}" else artist,
+            f.page, f.thumb, null, null, Slide.PHOTO)
     }
 
-    private fun item(o: JSONObject?): HeroRepo.Item? {
-        o ?: return null
-        val image = o.optString("image_id").takeIf { it.isNotBlank() && it != "null" } ?: return null
-        val th = o.optJSONObject("thumbnail")
-        val w = th?.optInt("width", 0) ?: 0
-        val h = th?.optInt("height", 0) ?: 0
-        // Landscape-shaped only: a portrait painting cropped to 16:9 would lose its subject.
-        if (w <= 0 || h <= 0 || w * 100 < h * 115) return null
-        val id = o.optInt("id", 0).takeIf { it > 0 } ?: return null
-        val artist = o.optString("artist_title").takeIf { it.isNotBlank() && it != "null" } ?: "Unknown artist"
-        val date = o.optString("date_display").takeIf { it.isNotBlank() && it != "null" }
-        return HeroRepo.Item("art_$id", o.optString("title"), if (date != null) "$artist, $date" else artist,
-            "https://www.artic.edu/artworks/$id", "$IIIF/$image/full/1686,/0/default.jpg", null, null, Slide.PHOTO)
+    /** "Claude Monet (French, Paris 1840-1926 Giverny) - Haystacks - Google Art Project.jpg" -> "Claude Monet". */
+    private fun artist(file: String, fallback: String): String {
+        val first = base(file).split(" - ").firstOrNull()?.substringBefore(" (")?.trim().orEmpty()
+        return if (first.length in 3..40) first else fallback
     }
 
-    private fun post(json: String): Pair<Int, String?> = try {
-        val c = URL(API).openConnection() as HttpURLConnection
+    /** ... -> "Haystacks". */
+    private fun title(file: String, fallback: String): String {
+        val parts = base(file).split(" - ")
+        val t = if (parts.size >= 2) parts.drop(1).joinToString(" - ") else parts[0]
+        return t.replace("Google Art Project", "").trim().trimEnd('-', ' ').ifEmpty { fallback }
+    }
+
+    private fun base(file: String) = file.removePrefix("File:").substringBeforeLast('.').replace('_', ' ')
+
+    /** The "Google Art Project works by [painter]" category: 50 files from a random end of it. */
+    private fun category(painter: String): Pair<Int, List<Found>> {
+        val sort = if (Math.random() < 0.5) "sortkey" else "timestamp"
+        val dir = if (Math.random() < 0.5) "asc" else "desc"
+        return query(painter, "generator" to "categorymembers", "gcmtitle" to "Category:Google Art Project works by $painter",
+            "gcmtype" to "file", "gcmlimit" to "50", "gcmsort" to sort, "gcmdir" to dir)
+    }
+
+    /** For a painter without a category of their own: files whose name has their name and "Google Art Project". */
+    private fun search(painter: String): List<Found> {
+        val last = painter.substringAfterLast(' ').lowercase()
+        return query(painter, "generator" to "search", "gsrsearch" to "\"$painter\" \"Google Art Project\"",
+            "gsrnamespace" to "6", "gsrlimit" to "50").second.filter { it.file.lowercase().contains(last) }
+    }
+
+    private fun query(painter: String, vararg gen: Pair<String, String>): Pair<Int, List<Found>> {
+        val params = listOf("action" to "query", "format" to "json", "prop" to "imageinfo",
+            "iiprop" to "url|size|mime|extmetadata", "iiurlwidth" to "1920",
+            "iiextmetadatafilter" to "DateTimeOriginal|Categories") + gen.toList()
+        val url = API + "?" + params.joinToString("&") { URLEncoder.encode(it.first, "UTF-8") + "=" + URLEncoder.encode(it.second, "UTF-8") }
+        val (code, body) = HeroRepo.get(url)
+        if (code != 200 || body == null) return code to emptyList()
+        val out = ArrayList<Found>()
         try {
-            c.requestMethod = "POST"
-            c.connectTimeout = 10_000
-            c.readTimeout = 25_000
-            c.doOutput = true
-            c.setRequestProperty("User-Agent", HeroRepo.USER_AGENT)
-            c.setRequestProperty("Content-Type", "application/json")
-            c.setRequestProperty("Accept", "application/json")
-            c.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-            val code = c.responseCode
-            code to if (code == 200) c.inputStream.bufferedReader().use { it.readText() } else null
-        } finally { c.disconnect() }
-    } catch (e: Throwable) { -1 to null }
+            val pages = JSONObject(body).optJSONObject("query")?.optJSONObject("pages") ?: return code to out
+            for (key in pages.keys()) {
+                val p = pages.getJSONObject(key)
+                val ii = p.optJSONArray("imageinfo")?.optJSONObject(0) ?: continue
+                val mime = ii.optString("mime")
+                if (mime != "image/jpeg" && mime != "image/png") continue
+                val thumb = ii.optString("thumburl").ifEmpty { ii.optString("url") }
+                if (!thumb.startsWith("https://")) continue
+                val meta = ii.optJSONObject("extmetadata")
+                val date = meta?.optJSONObject("DateTimeOriginal")?.optString("value").orEmpty().replace(TAGS, " ")
+                val year = YEAR.find(date)?.groupValues?.get(1)?.toIntOrNull()
+                val cats = meta?.optJSONObject("Categories")?.optString("value").orEmpty().replace('|', ' ')
+                out.add(Found(p.optLong("pageid"), p.optString("title"), painter, ii.optInt("width"), ii.optInt("height"),
+                    thumb, ii.optString("descriptionurl"), year, cats))
+            }
+        } catch (e: Throwable) { }
+        return code to out
+    }
 }
