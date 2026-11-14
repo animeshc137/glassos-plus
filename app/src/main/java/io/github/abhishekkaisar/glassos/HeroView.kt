@@ -38,6 +38,8 @@ class HeroView(ctx: Context, private val loader: (Slide) -> Loaded?) : View(ctx)
     var topY = 0f
     /** Off: a slow zoom redraws the whole screen every frame for 10 of every 10.2 s, which this GPU cannot afford. */
     var kenBurns = false
+    /** How long each slide stays before the next fades in (Settings > Change wallpaper every). */
+    var holdMs = HOLD_MS
     var onOpen: ((Slide) -> Unit)? = null
     var restoredKey = ""
     var onSelected: ((String) -> Unit)? = null
@@ -268,7 +270,7 @@ class HeroView(ctx: Context, private val loader: (Slide) -> Loaded?) : View(ctx)
         val t = clock()
         var waitMs = -1L
         if (next == null && running && slides.size > 1 && cur != null) {
-            val left = HOLD_MS - (t - curShownClock)
+            val left = holdMs - (t - curShownClock)
             if (left <= 0) {
                 val ni = (curIdx + 1) % slides.size
                 val l = cache[slides[ni].key]
@@ -291,12 +293,15 @@ class HeroView(ctx: Context, private val loader: (Slide) -> Loaded?) : View(ctx)
         else if (waitMs >= 0) handler.postDelayed(wake, waitMs)
     }
 
-    private fun kbActive(l: Loaded?): Boolean = l != null && l.slide.kind == Slide.PHOTO && clock() - l.bornClock < KB_MS
+    /** The slow zoom lasts one hold, but never longer than [KB_MAX_MS]: a long hold would redraw every frame for minutes. */
+    private fun kbMs() = minOf(holdMs + 2 * FADE_MS, KB_MAX_MS)
+
+    private fun kbActive(l: Loaded?): Boolean = l != null && l.slide.kind == Slide.PHOTO && clock() - l.bornClock < kbMs()
 
     private fun kbMatrix(l: Loaded, out: Matrix) {
         out.reset()
         if (!kenBurns || l.slide.kind != Slide.PHOTO) return
-        val p = ((clock() - l.bornClock) / KB_MS.toFloat()).coerceIn(0f, 1f)
+        val p = ((clock() - l.bornClock) / kbMs().toFloat()).coerceIn(0f, 1f)
         val e = p * p * (3 - 2 * p) * 0.35f + p * 0.65f
         val s = 1f + 0.07f * e
         val w = width.coerceAtLeast(1).toFloat()
@@ -489,7 +494,7 @@ class HeroView(ctx: Context, private val loader: (Slide) -> Loaded?) : View(ctx)
         const val NIGHT = 0xFF05060C.toInt()
         const val HOLD_MS = 8000L
         const val FADE_MS = 1100L
-        const val KB_MS = HOLD_MS + 2 * FADE_MS
+        const val KB_MAX_MS = 30_000L
     }
 }
 

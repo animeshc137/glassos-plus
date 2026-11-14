@@ -43,7 +43,8 @@
             android:launchMode="singleTask"
             android:resumeWhilePausing="true"
             android:screenOrientation="landscape"
-            android:stateNotNeeded="true">
+            android:stateNotNeeded="true"
+            android:windowSoftInputMode="adjustPan|stateHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -66,6 +67,26 @@
             </intent-filter>
             <meta-data android:name="android.accessibilityservice" android:resource="@xml/fast_home_service" />
         </service>
+
+        <!-- Art screensaver (framed museum paintings). Chosen in Android's Screen saver settings, or by
+             Settings > Art paintings > Screensaver over the TV's own ADB. -->
+        <service
+            android:name=".ArtDream"
+            android:exported="true"
+            android:label="GlassOS+ Art"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name=".ArtPreviewActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenLayout|screenSize|uiMode"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
 
         <service
             android:name=".HomeWatcher"

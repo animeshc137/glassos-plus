@@ -98,7 +98,142 @@ class Prefs(ctx: Context) {
         get() = sp.getString("titleDestination", TitleLinks.NUVIO) ?: TitleLinks.NUVIO
         set(v) { sp.edit().putString("titleDestination", v).apply() }
 
+    /** Seconds each Top Shelf wallpaper stays before the next one fades in. */
+    var wallpaperSeconds: Int
+        get() = sp.getInt("wallpaperSeconds", DEFAULT_WALLPAPER_SECONDS)
+        set(v) { sp.edit().putInt("wallpaperSeconds", v).apply() }
+
+    // ---------- Reddit wallpapers ----------
+
+    private fun list(key: String, def: List<String>): List<String> =
+        sp.getString(key, null)?.split('|')?.filter { it.isNotBlank() } ?: def
+
+    private fun putList(key: String, v: Collection<String>) { sp.edit().putString(key, v.joinToString("|")).apply() }
+
+    /** Subreddits (without r/) the Reddit background draws from: presets that are ticked plus the user's own. */
+    var redditSubs: List<String>
+        get() = list("redditSubs", RedditRepo.DEFAULT_SUBS)
+        set(v) = putList("redditSubs", v)
+
+    /** hot, new, top or rising. */
+    var redditSort: String
+        get() = sp.getString("redditSort", "top") ?: "top"
+        set(v) { sp.edit().putString("redditSort", v).apply() }
+
+    /** For Top: day, week, month, year or all. */
+    var redditPeriod: String
+        get() = sp.getString("redditPeriod", "week") ?: "week"
+        set(v) { sp.edit().putString("redditPeriod", v).apply() }
+
+    var redditCount: Int
+        get() = sp.getInt("redditCount", 20)
+        set(v) { sp.edit().putInt("redditCount", v).apply() }
+
+    /** Smallest image width accepted, in pixels (0: any). */
+    var redditMinWidth: Int
+        get() = sp.getInt("redditMinWidth", 1920)
+        set(v) { sp.edit().putInt("redditMinWidth", v).apply() }
+
+    var redditRefreshHours: Int
+        get() = sp.getInt("redditRefreshHours", 6)
+        set(v) { sp.edit().putInt("redditRefreshHours", v).apply() }
+
+    // ---------- Art (museum paintings) ----------
+
+    /** Subjects, e.g. "Landscape" (see [ArtRepo.GENRES]); empty: any. */
+    var artGenres: List<String>
+        get() = list("artGenres", emptyList())
+        set(v) = putList("artGenres", v)
+
+    /** Ages, e.g. "Baroque" (see [ArtRepo.ERAS]); empty: any. */
+    var artEras: List<String>
+        get() = list("artEras", emptyList())
+        set(v) = putList("artEras", v)
+
+    /** Movements, e.g. "Impressionism" (see [ArtRepo.MOVEMENTS]); empty: any. */
+    var artStyles: List<String>
+        get() = list("artStyles", emptyList())
+        set(v) = putList("artStyles", v)
+
+    /** Painters: presets that are ticked plus the user's own; empty: any. */
+    var artArtists: List<String>
+        get() = list("artArtists", emptyList())
+        set(v) = putList("artArtists", v)
+
+    /** India and South Asia collections (see [ArtRepo.INDIA]); empty: none. */
+    var artRegions: List<String>
+        get() = list("artRegions", emptyList())
+        set(v) = putList("artRegions", v)
+
+    /** Leave out nude artwork (a guess from titles and categories). */
+    var artHideNude: Boolean
+        get() = sp.getBoolean("artHideNude", true)
+        set(v) { sp.edit().putBoolean("artHideNude", v).apply() }
+
+    var artCount: Int
+        get() = sp.getInt("artCount", 24)
+        set(v) { sp.edit().putInt("artCount", v).apply() }
+
+    var artRefreshHours: Int
+        get() = sp.getInt("artRefreshHours", 24)
+        set(v) { sp.edit().putInt("artRefreshHours", v).apply() }
+
+    // ---------- Art screensaver ----------
+
+    /** Seconds each painting stays on the screensaver. */
+    var saverSeconds: Int
+        get() = sp.getInt("saverSeconds", 60)
+        set(v) { sp.edit().putInt("saverSeconds", v).apply() }
+
+    /** Show each painting in a frame on a dark backdrop; off: the painting fills the screen. */
+    var saverFrame: Boolean
+        get() = sp.getBoolean("saverFrame", false)
+        set(v) { sp.edit().putBoolean("saverFrame", v).apply() }
+
+    /** Use the Art wallpaper's filters (one shared set of paintings); off: the screensaver's own filters below. */
+    var saverSameFilters: Boolean
+        get() = sp.getBoolean("saverSameFilters", false)
+        set(v) { sp.edit().putBoolean("saverSameFilters", v).apply() }
+
+    var saverGenres: List<String>
+        get() = list("saverGenres", emptyList())
+        set(v) = putList("saverGenres", v)
+
+    var saverEras: List<String>
+        get() = list("saverEras", emptyList())
+        set(v) = putList("saverEras", v)
+
+    var saverStyles: List<String>
+        get() = list("saverStyles", emptyList())
+        set(v) = putList("saverStyles", v)
+
+    var saverArtists: List<String>
+        get() = list("saverArtists", emptyList())
+        set(v) = putList("saverArtists", v)
+
+    var saverRegions: List<String>
+        get() = list("saverRegions", emptyList())
+        set(v) = putList("saverRegions", v)
+
+    var saverHideNude: Boolean
+        get() = sp.getBoolean("saverHideNude", true)
+        set(v) { sp.edit().putBoolean("saverHideNude", v).apply() }
+
+    var saverCount: Int
+        get() = sp.getInt("saverCount", 24)
+        set(v) { sp.edit().putInt("saverCount", v).apply() }
+
+    var saverCaption: Boolean
+        get() = sp.getBoolean("saverCaption", true)
+        set(v) { sp.edit().putBoolean("saverCaption", v).apply() }
+
+    var saverClock: Boolean
+        get() = sp.getBoolean("saverClock", false)
+        set(v) { sp.edit().putBoolean("saverClock", v).apply() }
+
     companion object {
         const val DEFAULT_SCENE = "scene:desert"
+        const val DEFAULT_WALLPAPER_SECONDS = 8
+        val WALLPAPER_SECONDS = listOf(5, 8, 15, 30, 60, 300, 900, 1800, 3600)
     }
 }

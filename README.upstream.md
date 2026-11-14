@@ -39,7 +39,7 @@ on the Android TV emulator.
   and Android TV or Google TV builds that keep their own home), GlassOS notices the stock home and covers it, so
   the Home button still lands in GlassOS.
 - **Starts at boot**, with the Fire TV boot logo handled correctly.
-- **First-run setup**: your name (on-screen keyboard), an optional profile photo, your country, your top-row apps,
+- **First-run setup**: your name (system keyboard), an optional profile photo, your country, your top-row apps,
   one-tap permissions and, on Android TV, a "Make GlassOS your home screen" step.
 - Built-in procedural scenes (night desert, dusk ocean, aurora, dark) when there is no network, or your own
   photos from the Pictures/Glass folder.
@@ -177,7 +177,33 @@ Choose in Settings > Top Shelf:
   streaming services in your country. Refreshed at most every 6 hours and cached for offline use.
 - **Apple TV (unofficial)**: the featured titles of the Apple TV app's web catalogue. Unofficial and off by default;
   it may stop working at any time.
+- **Reddit wallpapers**: pictures from the subreddits you tick (EarthPorn, CityPorn, SpacePorn, wallpapers and more)
+  or add by name. Settings > Reddit wallpapers sets Hot / New / Top / Rising (and the period for Top), how many
+  pictures to keep, the smallest size, and how often to refresh. Videos, galleries and portrait pictures are
+  skipped. Uses each subreddit's public RSS feed, so no account; Reddit's feed does not mark NSFW posts, so add only
+  safe-for-work subreddits, and Reddit may rate-limit the TV for a few minutes.
+- **Art (museum paintings)**: the public-domain scans Google Arts & Culture made of museum paintings, as kept on
+  [Wikimedia Commons](https://commons.wikimedia.org/wiki/Category:Google_Art_Project) (Google has no public feed).
+  Settings > Art paintings filters by painter (pick famous ones or add any name), movement, age and subject (the
+  subject is guessed from the title, so it is approximate). **India & South Asia** adds Hindu religious art (Krishna,
+  Ganesha, Shiva, Vishnu, Rama and Hanuman, Durga and Lakshmi) and Indian painting (Raja Ravi Varma, Kangra, Pahari,
+  Rajput and Mughal miniatures, the Bengal School, folk art, Himalayan thangkas, landscapes of India) from Commons
+  categories; they mix in with any painters you pick. **Hide nude artwork** (on by default) leaves out pictures whose
+  title or Commons categories suggest a nude. It is a guess from words, so it can miss one and can hide a clothed
+  picture such as bathers.
 - **Built-in scenes**: no network at all.
+
+### Art screensaver
+
+Settings > Art screensaver shows famous paintings full screen, one at a time, changing every 10 seconds to 15 minutes,
+with the title and painter bottom left. "Frame" shows each painting framed on a dark backdrop instead. It has the same
+filters as the Art wallpaper (subject, age, movement, painters), either its own set or, with "Same filters as the Art
+wallpaper", the wallpaper's. Tall paintings (most miniatures) are shown whole, fitted to the screen's height on a
+blurred copy of themselves; the wallpaper uses only landscape pictures. Android starts it when idle once it is chosen under Settings > Device Preferences >
+Screen saver; "Make it the screensaver" does that over the TV's own ADB. Fire TV may not allow third-party screensavers.
+
+Settings > Wallpaper interval sets how long each Top Shelf picture stays before the next one fades in
+(5 seconds to 1 hour; the default is 8 seconds).
 
 When a source has no art (no network, no key), the background chosen under "When Top Shelf art is unavailable" is
 shown.

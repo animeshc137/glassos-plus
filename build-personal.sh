@@ -20,6 +20,29 @@ mkdir -p tests/classes
   app/src/main/java/io/github/abhishekkaisar/glassos/RunningParse.java tests/PersonalizationCheck.java
 "$JAVA_HOME/bin/java" -cp tests/classes PersonalizationCheck
 ./gradlew --no-daemon assembleDebug lint
+# Every APK must carry the personal certificate, or the TV refuses to update the installed app ("signatures do not
+# match"). The fingerprint is public; the key is not. CI sets GLASSOS_REQUIRE_PERSONAL_KEY=true, which makes a
+# mismatch fail the build; elsewhere it only warns.
+EXPECTED_CERT_SHA256="c69ea10051024a7e537357e66360b9c68992ff8ab2d04082dff0c4e55cd00d55"
+APKSIGNER="$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)"
+if [ -z "$APKSIGNER" ]; then
+  echo "apksigner not found under $ANDROID_HOME/build-tools; cannot check the signing certificate" >&2
+  if [ "${GLASSOS_REQUIRE_PERSONAL_KEY:-}" = "true" ]; then exit 1; fi
+else
+  SIGNER_OUT="$("$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk 2>&1 || true)"
+  ACTUAL_CERT_SHA256="$(printf '%s\n' "$SIGNER_OUT" | sed -n 's/^.*[Ss]igner #1 certificate SHA-256 digest: *//p' | head -n 1 | tr -d '\r ')"
+  if [ -z "$ACTUAL_CERT_SHA256" ] && [ -x "$JAVA_HOME/bin/keytool" ]; then
+    # Second opinion if apksigner printed nothing we could read.
+    ACTUAL_CERT_SHA256="$("$JAVA_HOME/bin/keytool" -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk 2>/dev/null | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -n 1 | tr -d ': \r' | tr 'A-F' 'a-f')"
+  fi
+  if [ "$ACTUAL_CERT_SHA256" = "$EXPECTED_CERT_SHA256" ]; then
+    echo "APK is signed with the personal certificate ($ACTUAL_CERT_SHA256)"
+  else
+    echo "WARNING: the APK is NOT signed with the personal certificate (got $ACTUAL_CERT_SHA256); the TV will refuse to update the installed app." >&2
+    printf '%s\n' "$SIGNER_OUT" >&2
+    if [ "${GLASSOS_REQUIRE_PERSONAL_KEY:-}" = "true" ]; then exit 1; fi
+  fi
+fi
 python3 - <<'PY'
 import xml.etree.ElementTree as E
 from pathlib import Path
