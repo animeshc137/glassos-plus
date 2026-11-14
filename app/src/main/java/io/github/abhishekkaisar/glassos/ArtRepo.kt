@@ -99,8 +99,7 @@ object ArtRepo {
      * Words in a file name or its Commons categories that mark nude artwork. A guess from text, so it can miss a nude
      * and can hide a clothed picture (bathers, Venus): it errs on the side of hiding.
      */
-    private val NUDE = Regex("\\b(?:nude|nudes|nudity|naked|nu|nue|akt|odalisques?|bathers?|bathing|venus|aphrodite|desnuda|adam and eve|" +
-        "leda|dana[e\u00eb]|susanna|bacchanal\\w*|bacchantes?|nymphs?|naiads?|three graces|judgement of paris|callisto)\\b", RegexOption.IGNORE_CASE)
+    private val NUDE = Regex("\\b(?:nude\\w*|nudit\\w*|naked|nu|nue|nus|nudo|nudi|desnud\\w*|nackt\\w*|naakt|akt|odalisque\\w*|bather\\w*|bathing|baigneu\\w+|badende\\w*|bagnant\\w*|venus|venere|aphrodite|afrodite|adam and eve|adam et [e\u00e8]ve|leda|dana[e\u00eb]|susann?a|susanne|suzanna|bacchanal\\w*|bacchante\\w*|nymph\\w*|naiad\\w*|dryad\\w*|three graces|trois gr[a\u00e2]ces|tre grazie|judgement of paris|jugement de p[a\u00e2]ris|actaeon|act[e\u00e9]on|callisto)\\b", RegexOption.IGNORE_CASE)
 
     /** A ready-made set of Commons categories of Indian art. */
     class ArtSet(val label: String, val categories: List<String>)
@@ -162,6 +161,9 @@ object ArtRepo {
         }
         val eras = filters.eras.mapNotNull { e -> ERAS.firstOrNull { it.label == e } }
         val words = filters.genres.flatMap { g -> GENRES.firstOrNull { it.first == g }?.second ?: emptyList() }.map { it.lowercase() }
+        // Whole words only ("sea" is not "seated", "saint" is not "Sainte-Victoire"); a plural counts.
+        val subject = if (words.isEmpty()) null
+        else Regex("\\b(?:" + words.joinToString("|") { Regex.escape(it) } + ")(?:e?s)?\\b", RegexOption.IGNORE_CASE)
         // The screensaver can show a portrait painting fitted to the screen; the wallpaper needs landscape ones.
         val landscapeOnly = src != HeroRepo.SRC_ARTSAVER
         // Look everything up side by side: each answer takes a second or two, and they add up one after another.
@@ -193,7 +195,7 @@ object ArtRepo {
         val items = found.values.filter { f ->
             shapeOk(f, landscapeOnly) &&
                 (eras.isEmpty() || f.year != null && eras.any { f.year in it.from..it.to }) &&
-                (words.isEmpty() || matches(f, words)) &&
+                (subject == null || f.collection || subject.containsMatchIn(title(f.file, f.painter) + " " + f.categories)) &&
                 !(filters.hideNude && NUDE.containsMatchIn(f.file + " " + f.categories))
         }.shuffled().map { item(it) }
         if (items.isEmpty()) HeroRepo.lastResult[src] = "No paintings matched. Loosen the filters, add painters or collections" +
@@ -206,11 +208,6 @@ object ArtRepo {
         val minLong = if (f.collection) 1200 else MIN_WIDTH
         return if (landscapeOnly) f.width >= minLong && f.width * 100 >= f.height * 115
         else maxOf(f.width, f.height) >= minLong && f.width * 100 >= f.height * 50 && f.width * 100 <= f.height * 260
-    }
-
-    private fun matches(f: Found, words: List<String>): Boolean {
-        val text = (title(f.file, f.painter) + " " + f.categories).lowercase()
-        return words.any { text.contains(it) }
     }
 
     private fun item(f: Found): HeroRepo.Item {
