@@ -29,11 +29,17 @@ if [ -z "$APKSIGNER" ]; then
   echo "apksigner not found under $ANDROID_HOME/build-tools; cannot check the signing certificate" >&2
   if [ "${GLASSOS_REQUIRE_PERSONAL_KEY:-}" = "true" ]; then exit 1; fi
 else
-  ACTUAL_CERT_SHA256="$("$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | tr -d '\r')"
+  SIGNER_OUT="$("$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk 2>&1 || true)"
+  ACTUAL_CERT_SHA256="$(printf '%s\n' "$SIGNER_OUT" | sed -n 's/^.*[Ss]igner #1 certificate SHA-256 digest: *//p' | head -n 1 | tr -d '\r ')"
+  if [ -z "$ACTUAL_CERT_SHA256" ] && [ -x "$JAVA_HOME/bin/keytool" ]; then
+    # Second opinion if apksigner printed nothing we could read.
+    ACTUAL_CERT_SHA256="$("$JAVA_HOME/bin/keytool" -printcert -jarfile app/build/outputs/apk/debug/app-debug.apk 2>/dev/null | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -n 1 | tr -d ': \r' | tr 'A-F' 'a-f')"
+  fi
   if [ "$ACTUAL_CERT_SHA256" = "$EXPECTED_CERT_SHA256" ]; then
     echo "APK is signed with the personal certificate ($ACTUAL_CERT_SHA256)"
   else
     echo "WARNING: the APK is NOT signed with the personal certificate (got $ACTUAL_CERT_SHA256); the TV will refuse to update the installed app." >&2
+    printf '%s\n' "$SIGNER_OUT" >&2
     if [ "${GLASSOS_REQUIRE_PERSONAL_KEY:-}" = "true" ]; then exit 1; fi
   fi
 fi
