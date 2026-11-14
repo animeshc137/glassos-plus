@@ -23,7 +23,17 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0'
+      - name: Restore personal signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.PERSONAL_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/personal.p12"
+            echo "GLASSOS_DEBUG_KEYSTORE=$RUNNER_TEMP/personal.p12" >> "$GITHUB_ENV"
+          fi
       - name: Run JVM checks, build debug APK and check lint
+        env:
+          GLASSOS_DEBUG_PASSWORD: ${{ secrets.PERSONAL_KEYSTORE_PASSWORD }}
         run: bash build-personal.sh
       - uses: actions/upload-artifact@v4
         with:
