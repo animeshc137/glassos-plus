@@ -176,10 +176,21 @@ object SourcePages {
         else -> "$h hours"
     }
 
-    private fun seconds(s: Int): String = when {
+    fun seconds(s: Int): String = when {
         s < 60 -> "$s seconds"
         s == 60 -> "1 minute"
-        else -> "${s / 60} minutes"
+        s < 3600 -> "${s / 60} minutes"
+        s == 3600 -> "1 hour"
+        else -> "${s / 3600} hours"
+    }
+
+    /** The choices for Change wallpaper every, as (seconds, text); the built-in 8 seconds is marked. */
+    fun wallpaperSecondsOptions(): List<Pair<String, String>> = Prefs.WALLPAPER_SECONDS.map {
+        it.toString() to seconds(it) + if (it == Prefs.DEFAULT_WALLPAPER_SECONDS) " (default)" else ""
+    }
+
+    private fun wallpaperTime(b: PageBuilder) {
+        b.choice("Change wallpaper every", wallpaperSecondsOptions(), { b.act.prefs.wallpaperSeconds.toString() }, { b.act.setWallpaperSeconds(it.toInt()) })
     }
     private fun hoursOptions(v: List<Int>) = v.map { it.toString() to hours(it) }
 
@@ -243,6 +254,7 @@ object SourcePages {
         note("Pictures from the subreddits you choose, like Projectivy. Videos, galleries and portrait pictures are skipped. Reddit does not mark NSFW posts in its feed, so only add safe-for-work subreddits.")
         useAsBackground(this, HeroRepo.SRC_REDDIT)
         sub("Subreddits", { summary(p.redditSubs.map { "r/$it" }) }) { subreddits() }
+        wallpaperTime(this)
         choice("Sort by", RedditRepo.SORTS, { p.redditSort }, { p.redditSort = it }, after = { host.changed(HeroRepo.SRC_REDDIT); host.rebuild() })
         if (p.redditSort == "top") {
             choice("Top of", RedditRepo.PERIODS, { p.redditPeriod }, { p.redditPeriod = it }, after = { host.changed(HeroRepo.SRC_REDDIT) })
@@ -305,6 +317,7 @@ object SourcePages {
         val p = act.prefs
         note("Famous paintings: the public-domain scans Google Arts & Culture made of museum paintings, as kept on Wikimedia Commons. Tick nothing to see a mix of famous painters.")
         useAsBackground(this, HeroRepo.SRC_ART)
+        wallpaperTime(this)
         filterRows(this, Filt(p, false))
         choice("Refresh every", hoursOptions(ArtRepo.REFRESH_HOURS), { p.artRefreshHours.toString() }, { p.artRefreshHours = it.toInt() })
         action("Refresh now", "›") { r -> refreshNow(this, HeroRepo.SRC_ART, r) }

@@ -211,6 +211,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             leftX = margin.toFloat()
             topY = sh * 30f / 1080f
             restoredKey = prefs.heroSelectedKey
+            holdMs = prefs.wallpaperSeconds * 1000L
             onSelected = { prefs.heroSelectedKey = it }
             onOpen = { openSlide(it) }
             openLabel = { "Open in " + TitleLinks.label(prefs.titleDestination) }
@@ -590,6 +591,12 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         invalidateDeep(root)
     }
 
+    /** Sets how long each wallpaper stays before the next one (applies at once). */
+    fun setWallpaperSeconds(seconds: Int) {
+        prefs.wallpaperSeconds = seconds
+        hero.holdMs = seconds * 1000L
+    }
+
     /** Switches the Top Shelf source and reloads it (fetching at once when the cache is stale). */
     fun setTopShelf(src: String) {
         prefs.topShelf = src
@@ -642,6 +649,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         }
         if (layoutKey != prefs.layoutKey) refreshLayout()
         resumed = true
+        hero.holdMs = prefs.wallpaperSeconds * 1000L
         continueRow.setAutoScrollEnabled(prefs.continueAutoScroll)
         if (::setup.isInitialized) setup.onReturned()
         updateTime()

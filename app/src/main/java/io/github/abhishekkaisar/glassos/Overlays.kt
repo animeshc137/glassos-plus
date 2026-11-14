@@ -35,6 +35,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
     private val shelfRow = RowView(context, "Top Shelf")
     private val contentRow = RowView(context, "Background titles")
     private val refreshRow = RowView(context, "Refresh hero catalog")
+    private val wallpaperTimeRow = RowView(context, "Change wallpaper every")
     private val redditRow = RowView(context, "Reddit wallpapers")
     private val artRow = RowView(context, "Art paintings")
     private val saverRow = RowView(context, "Art screensaver")
@@ -124,6 +125,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         list.addView(shelfRow, rowLp())
         list.addView(contentRow, rowLp())
         list.addView(refreshRow, rowLp())
+        list.addView(wallpaperTimeRow, rowLp())
         list.addView(redditRow, rowLp())
         list.addView(artRow, rowLp())
         list.addView(saverRow, rowLp())
@@ -172,6 +174,12 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         hiddenRow.onClick = { step(hiddenRow, SetupView.Step.HIDDEN) }
         permsRow.onClick = { step(permsRow, SetupView.Step.PERMISSIONS) }
         runningRow.onClick = { showRunning() }
+        wallpaperTimeRow.onClick = {
+            val options = Prefs.WALLPAPER_SECONDS
+            val i = options.indexOf(act.prefs.wallpaperSeconds)
+            act.setWallpaperSeconds(options[(i + 1) % options.size])
+            updateValues()
+        }
         redditRow.onClick = { showPages(redditRow, SourcePages.reddit()) }
         artRow.onClick = { showPages(artRow, SourcePages.art()) }
         saverRow.onClick = { showPages(saverRow, SourcePages.screensaver()) }
@@ -270,6 +278,8 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         fastHomeRow.valueView.text = if (FastHomeService.connected) "Connected" else "Enable in Accessibility"
         contentRow.valueView.text = when (act.prefs.catalogContent) { "movie" -> "Movies"; "series" -> "Series"; else -> "Movies & series" }
         refreshRow.valueView.text = "›"
+        wallpaperTimeRow.valueView.text = SourcePages.wallpaperSecondsOptions().firstOrNull { it.first == act.prefs.wallpaperSeconds.toString() }?.second
+            ?: SourcePages.seconds(act.prefs.wallpaperSeconds)
         columnsRow.valueView.text = act.prefs.columns.toString()
         insetRow.valueView.text = "${act.prefs.sideMargin}px / 1080p"
         gapRow.valueView.text = "${act.prefs.tileGap}px / 1080p"

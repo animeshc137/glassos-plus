@@ -98,6 +98,11 @@ class Prefs(ctx: Context) {
         get() = sp.getString("titleDestination", TitleLinks.NUVIO) ?: TitleLinks.NUVIO
         set(v) { sp.edit().putString("titleDestination", v).apply() }
 
+    /** Seconds each Top Shelf wallpaper stays before the next one fades in. */
+    var wallpaperSeconds: Int
+        get() = sp.getInt("wallpaperSeconds", DEFAULT_WALLPAPER_SECONDS)
+        set(v) { sp.edit().putInt("wallpaperSeconds", v).apply() }
+
     // ---------- Reddit wallpapers ----------
 
     private fun list(key: String, def: List<String>): List<String> =
@@ -210,5 +215,7 @@ class Prefs(ctx: Context) {
 
     companion object {
         const val DEFAULT_SCENE = "scene:desert"
+        const val DEFAULT_WALLPAPER_SECONDS = 8
+        val WALLPAPER_SECONDS = listOf(5, 8, 15, 30, 60, 300, 900, 1800, 3600)
     }
 }

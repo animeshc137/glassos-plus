@@ -196,6 +196,9 @@ filters as the Art wallpaper (subject, age, movement, painters), either its own 
 wallpaper", the wallpaper's. Android starts it when idle once it is chosen under Settings > Device Preferences >
 Screen saver; "Make it the screensaver" does that over the TV's own ADB. Fire TV may not allow third-party screensavers.
 
+Settings > Change wallpaper every sets how long each Top Shelf picture stays before the next one fades in
+(5 seconds to 1 hour; the default is 8 seconds).
+
 When a source has no art (no network, no key), the background chosen under "When Top Shelf art is unavailable" is
 shown.
 
