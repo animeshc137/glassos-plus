@@ -143,9 +143,15 @@ class ArtShowView(ctx: Context) : View(ctx) {
             if (queue.isEmpty() || pos >= queue.size) {
                 var slides = HeroRepo.cachedTitles(context, src)
                 if (slides.isEmpty()) {
-                    // Nothing cached yet (first run, or the filters changed): fetch now.
-                    HeroRepo.refresh(context, src)
-                    slides = HeroRepo.cachedTitles(context, src)
+                    // Nothing cached yet (first run): fetch, and start on the first pictures that arrive while the rest download.
+                    val fetching = Thread { HeroRepo.refresh(context, src) }.apply { priority = Thread.MIN_PRIORITY; start() }
+                    var waited = 0
+                    while (slides.isEmpty() && fetching.isAlive && waited < 180 && t == token) {
+                        Thread.sleep(1000)
+                        waited++
+                        slides = HeroRepo.cachedTitles(context, src)
+                    }
+                    if (slides.isEmpty()) slides = HeroRepo.cachedTitles(context, src)
                 } else if (HeroRepo.isStale(context, src)) {
                     Thread { HeroRepo.refresh(context, src) }.apply { priority = Thread.MIN_PRIORITY }.start()
                 }

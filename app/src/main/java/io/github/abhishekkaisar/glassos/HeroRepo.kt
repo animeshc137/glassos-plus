@@ -173,7 +173,7 @@ object HeroRepo {
             SRC_ARTSAVER -> Prefs(ctx).saverCount
             else -> Int.MAX_VALUE
         }
-        val changed = store(d, items, if (src == SRC_APPLE) "us" else Prefs(ctx).country, keep)
+        val changed = store(d, items, if (src == SRC_APPLE) "us" else Prefs(ctx).country, keep, parallel = src == SRC_REDDIT || src == SRC_ART || src == SRC_ARTSAVER)
         if (src == SRC_REDDIT || src == SRC_ART || src == SRC_ARTSAVER) {
             // The fetchers say why they found nothing (offline, blocked, filters too strict) in lastResult.
             val why = lastResult[src]
@@ -213,31 +213,52 @@ object HeroRepo {
         return try { parse(text) } catch (e: Throwable) { null }
     }
 
-    private fun store(d: File, items: List<Item>, region: String, max: Int = Int.MAX_VALUE): Boolean {
+    /**
+     * Downloads [items] and writes titles.json. With [parallel] (the picture sources, whose images are big and slow to
+     * render at the server) four download at a time and titles.json is rewritten after every group, so a reader such
+     * as the screensaver can start on the first pictures while the rest still arrive.
+     */
+    private fun store(d: File, items: List<Item>, region: String, max: Int = Int.MAX_VALUE, parallel: Boolean = false): Boolean {
         if (items.isEmpty()) return false
         val out = JSONArray()
-        val keep = HashSet<String>()
-        for (it in items) {
-            if (out.length() >= max) break
+        // One item's art (and logo) downloaded; null when its art could not be fetched or was rejected.
+        fun fetch(it: Item): JSONObject? {
             val base = it.id.replace(Regex("[^A-Za-z0-9.]"), "_")
             val art = File(d, if (it.id.startsWith("cinemeta_")) "${base}_hq.jpg" else "$base.jpg")
-            if (!art.exists() && !downloadArt(it, art)) continue
-            keep.add(art.name)
+            if (!art.exists() && !downloadArt(it, art)) return null
             var logo: File? = null
             if (it.logo != null) {
                 val lf = File(d, "${base}_logo.png")
-                if (lf.exists() || download(it.logo, lf)) { logo = lf; keep.add(lf.name) }
+                if (lf.exists() || download(it.logo, lf)) logo = lf
             }
-            out.put(JSONObject().apply {
+            return JSONObject().apply {
                 put("id", it.id); put("title", it.title); put("subtitle", it.subtitle)
                 put("url", it.url); put("art", art.path); put("logo", logo?.path ?: ""); put("pkg", it.pkg ?: ""); put("kind", it.kind)
-            })
+            }
+        }
+        fun write() {
+            val f = File(d, "titles.json")
+            val tmp = File(d, "titles.json.tmp")
+            tmp.writeText(JSONObject().put("region", region).put("fetchedAt", System.currentTimeMillis()).put("items", out).toString())
+            tmp.renameTo(f)
+        }
+        for (group in items.chunked(if (parallel) 4 else 1)) {
+            if (out.length() >= max) break
+            val got = arrayOfNulls<JSONObject>(group.size)
+            if (group.size == 1) got[0] = fetch(group[0])
+            else group.mapIndexed { i, it -> Thread { got[i] = fetch(it) }.also { t -> t.start() } }.forEach { t -> t.join() }
+            for (o in got) if (o != null && out.length() < max) out.put(o)
+            if (parallel && out.length() > 0) write()
         }
         if (out.length() == 0) return false
-        val f = File(d, "titles.json")
-        val tmp = File(d, "titles.json.tmp")
-        tmp.writeText(JSONObject().put("region", region).put("fetchedAt", System.currentTimeMillis()).put("items", out).toString())
-        tmp.renameTo(f)
+        write()
+        // Keep only what titles.json uses (pictures fetched beyond [max], and last time's, go).
+        val keep = HashSet<String>()
+        for (i in 0 until out.length()) {
+            val o = out.getJSONObject(i)
+            keep.add(File(o.getString("art")).name)
+            o.optString("logo").takeIf { it.isNotEmpty() }?.let { keep.add(File(it).name) }
+        }
         d.listFiles()?.forEach { if ((it.name.endsWith(".jpg") || it.name.endsWith(".png")) && it.name !in keep) it.delete() }
         return true
     }

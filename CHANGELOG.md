@@ -4,7 +4,7 @@
 
 - Settings text fields (name, TMDB key, subreddits, painters) use the system keyboard, so the Android TV remote app on a phone can type into them; pasted text works too.
 - New Top Shelf sources: Reddit wallpapers (tick or add subreddits, Hot/New/Top/Rising, period, count, minimum size, refresh interval) and Art (Google Art Project scans of museum paintings from Wikimedia Commons, filtered by painter, movement, age and subject). Both read public feeds that work without an account.
-- Settings > Change wallpaper every sets how long each Top Shelf wallpaper stays (5 seconds to 1 hour; 8 seconds as before), also on the Reddit and Art pages.
+- Settings > Wallpaper interval sets how long each Top Shelf wallpaper stays (5 seconds to 1 hour; 8 seconds as before), also on the Reddit and Art pages.
 - New art screensaver (Android DreamService): paintings full screen with title and painter (optional frame), configurable interval, optional clock, the same filters as the Art wallpaper (its own or shared); can be set as the screensaver over the TV's own ADB.
 
 ## 1.1.2

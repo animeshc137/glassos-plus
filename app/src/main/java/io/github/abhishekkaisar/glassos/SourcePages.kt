@@ -184,13 +184,13 @@ object SourcePages {
         else -> "${s / 3600} hours"
     }
 
-    /** The choices for Change wallpaper every, as (seconds, text); the built-in 8 seconds is marked. */
+    /** The choices for Wallpaper interval, as (seconds, text); the built-in 8 seconds is marked. */
     fun wallpaperSecondsOptions(): List<Pair<String, String>> = Prefs.WALLPAPER_SECONDS.map {
         it.toString() to seconds(it) + if (it == Prefs.DEFAULT_WALLPAPER_SECONDS) " (default)" else ""
     }
 
     private fun wallpaperTime(b: PageBuilder) {
-        b.choice("Change wallpaper every", wallpaperSecondsOptions(), { b.act.prefs.wallpaperSeconds.toString() }, { b.act.setWallpaperSeconds(it.toInt()) })
+        b.choice("Wallpaper interval", wallpaperSecondsOptions(), { b.act.prefs.wallpaperSeconds.toString() }, { b.act.setWallpaperSeconds(it.toInt()) })
     }
     private fun hoursOptions(v: List<Int>) = v.map { it.toString() to hours(it) }
 

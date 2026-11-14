@@ -35,7 +35,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
     private val shelfRow = RowView(context, "Top Shelf")
     private val contentRow = RowView(context, "Background titles")
     private val refreshRow = RowView(context, "Refresh hero catalog")
-    private val wallpaperTimeRow = RowView(context, "Change wallpaper every")
+    private val wallpaperTimeRow = RowView(context, "Wallpaper interval")
     private val redditRow = RowView(context, "Reddit wallpapers")
     private val artRow = RowView(context, "Art paintings")
     private val saverRow = RowView(context, "Art screensaver")
