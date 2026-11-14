@@ -147,17 +147,24 @@ object ArtRepo {
             f.page, f.thumb, null, null, Slide.PHOTO)
     }
 
-    /** "Claude Monet (French, Paris 1840-1926 Giverny) - Haystacks - Google Art Project.jpg" -> "Claude Monet". */
+    /**
+     * The file name split into its parts without "Google Art Project":
+     * "Claude Monet (French, Paris 1840-1926 Giverny) - Haystacks - Google Art Project.jpg" -> [Claude Monet (...), Haystacks].
+     */
+    private fun parts(file: String): List<String> =
+        base(file).split(" - ").map { it.replace("Google Art Project", "").trim().trim('-', ' ') }.filter { it.isNotEmpty() }
+
+    /** "Claude Monet (French, ...) - Haystacks" -> "Claude Monet"; a name without an artist part gives [fallback]. */
     private fun artist(file: String, fallback: String): String {
-        val first = base(file).split(" - ").firstOrNull()?.substringBefore(" (")?.trim().orEmpty()
+        val p = parts(file)
+        val first = if (p.size >= 2) p[0].substringBefore(" (").trim() else ""
         return if (first.length in 3..40) first else fallback
     }
 
-    /** ... -> "Haystacks". */
+    /** ... -> "Haystacks"; "The White Horse by John Constable - Google Art Project" -> the whole name. */
     private fun title(file: String, fallback: String): String {
-        val parts = base(file).split(" - ")
-        val t = if (parts.size >= 2) parts.drop(1).joinToString(" - ") else parts[0]
-        return t.replace("Google Art Project", "").trim().trimEnd('-', ' ').ifEmpty { fallback }
+        val p = parts(file)
+        return (if (p.size >= 2) p.drop(1).joinToString(" - ") else p.firstOrNull().orEmpty()).ifEmpty { fallback }
     }
 
     private fun base(file: String) = file.removePrefix("File:").substringBeforeLast('.').replace('_', ' ')
