@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,10 +27,19 @@ jobs:
       - name: Restore personal signing key
         env:
           KEYSTORE_B64: ${{ secrets.PERSONAL_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.PERSONAL_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
             printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/personal.p12"
             echo "GLASSOS_DEBUG_KEYSTORE=$RUNNER_TEMP/personal.p12" >> "$GITHUB_ENV"
+            # From here on a build signed with any other key fails instead of producing an APK the TV rejects.
+            echo "GLASSOS_REQUIRE_PERSONAL_KEY=true" >> "$GITHUB_ENV"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # Pull requests from forks cannot read secrets; their APK is for CI only, never for the TV.
+            echo "::warning::Personal signing key unavailable; this APK is signed with a throwaway key and cannot update the TV."
+          else
+            echo "::error::PERSONAL_KEYSTORE_BASE64 / PERSONAL_KEYSTORE_PASSWORD are not set. Refusing to build an APK the TV would reject."
+            exit 1
           fi
       - name: Run JVM checks, build debug APK and check lint
         env:
