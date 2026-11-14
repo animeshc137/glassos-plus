@@ -93,7 +93,13 @@ object ArtRepo {
     private const val PAINTERS_PER_REFRESH = 6
     private val YEAR = Regex("\\b(\\d{3,4})\\b")
     private val TAGS = Regex("<[^>]*>")
-    private const val COLLECTION_CATEGORIES_PER_REFRESH = 4
+    private const val COLLECTION_CATEGORIES_PER_REFRESH = 5
+
+    /** A photo upload rather than a painting: a date or a camera number in the file name ("2017-02-13 (055)", "IMG_1234"). */
+    private val PHOTO_NAME = Regex("\\b(?:19|20)\\d\\d-\\d\\d-\\d\\d\\b|\\b(?:IMG|DSC|DSCN|DSCF|PXL)_?\\d{3,}", RegexOption.IGNORE_CASE)
+
+    /** Catalogue tails on Wellcome and similar files ("... Wellcome V0044949", "... (055)"), left out of the title. */
+    private val CATALOG = Regex("\\s*(?:[.-])?\\s*Wellcome\\s*V\\d+.*$|\\s*\\(\\d{1,4}\\)$", RegexOption.IGNORE_CASE)
 
     /**
      * Words in a file name or its Commons categories that mark nude artwork. A guess from text, so it can miss a nude
@@ -174,7 +180,7 @@ object ArtRepo {
                 code to (if (files.isEmpty() && code == 200) search(painter) else files)
             }
         }
-        for ((label, cat) in regionSources.shuffled().take(COLLECTION_CATEGORIES_PER_REFRESH)) {
+        for ((label, cat) in balanced(regionSources)) {
             jobs.add { members(cat, label, true) }
         }
         val results = arrayOfNulls<Pair<Int, List<Found>>>(jobs.size)
@@ -196,11 +202,24 @@ object ArtRepo {
             shapeOk(f, landscapeOnly) &&
                 (eras.isEmpty() || f.year != null && eras.any { f.year in it.from..it.to }) &&
                 (subject == null || f.collection || subject.containsMatchIn(title(f.file, f.painter) + " " + f.categories)) &&
+                !(f.collection && PHOTO_NAME.containsMatchIn(f.file)) &&
                 !(filters.hideNude && NUDE.containsMatchIn(f.file + " " + f.categories))
         }.shuffled().map { item(it) }
         if (items.isEmpty()) HeroRepo.lastResult[src] = "No paintings matched. Loosen the filters, add painters or collections" +
             (if (filters.hideNude) ", or turn off Hide nude artwork." else ".")
         return items
+    }
+
+    /** Up to [COLLECTION_CATEGORIES_PER_REFRESH] categories, taking turns between the chosen collections so each one shows up. */
+    private fun balanced(sources: List<Pair<String, String>>): List<Pair<String, String>> {
+        val byCollection = sources.groupBy({ it.first }, { it }).values.map { it.shuffled() }.shuffled()
+        val out = ArrayList<Pair<String, String>>()
+        var round = 0
+        while (out.size < COLLECTION_CATEGORIES_PER_REFRESH && byCollection.any { round < it.size }) {
+            for (l in byCollection) if (out.size < COLLECTION_CATEGORIES_PER_REFRESH) l.getOrNull(round)?.let { out.add(it) }
+            round++
+        }
+        return out
     }
 
     /** Big enough, and the right shape: landscape for the wallpaper, any ordinary shape for the screensaver. */
@@ -212,7 +231,7 @@ object ArtRepo {
 
     private fun item(f: Found): HeroRepo.Item {
         // A collection's files are not named "Artist - Title - Google Art Project": the name is the title, the collection the byline.
-        val title = if (f.collection) base(f.file).take(90) else title(f.file, f.painter)
+        val title = if (f.collection) base(f.file).replace(CATALOG, "").trim().trimEnd('.', '-', ' ').take(90) else title(f.file, f.painter)
         val artist = if (f.collection) f.painter else artist(f.file, f.painter)
         return HeroRepo.Item("art_${f.id}", title, if (f.year != null) "$artist, ${f.year}" else artist,
             f.page, f.thumb, null, null, Slide.PHOTO)
