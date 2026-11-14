@@ -39,7 +39,7 @@ on the Android TV emulator.
   and Android TV or Google TV builds that keep their own home), GlassOS notices the stock home and covers it, so
   the Home button still lands in GlassOS.
 - **Starts at boot**, with the Fire TV boot logo handled correctly.
-- **First-run setup**: your name (on-screen keyboard), an optional profile photo, your country, your top-row apps,
+- **First-run setup**: your name (system keyboard), an optional profile photo, your country, your top-row apps,
   one-tap permissions and, on Android TV, a "Make GlassOS your home screen" step.
 - Built-in procedural scenes (night desert, dusk ocean, aurora, dark) when there is no network, or your own
   photos from the Pictures/Glass folder.
@@ -177,7 +177,21 @@ Choose in Settings > Top Shelf:
   streaming services in your country. Refreshed at most every 6 hours and cached for offline use.
 - **Apple TV (unofficial)**: the featured titles of the Apple TV app's web catalogue. Unofficial and off by default;
   it may stop working at any time.
+- **Reddit wallpapers**: pictures from the subreddits you tick (EarthPorn, CityPorn, SpacePorn, wallpapers and more)
+  or add by name. Settings > Reddit wallpapers sets Hot / New / Top / Rising (and the period for Top), how many
+  pictures to keep, the smallest size, and how often to refresh. NSFW posts, videos and portrait pictures are
+  skipped. Uses Reddit's public listing, so no account; Reddit may refuse or rate-limit it.
+- **Art (museum paintings)**: famous paintings from the [Art Institute of Chicago's open collection](https://api.artic.edu/docs/)
+  (public domain; Google Arts & Culture has no public feed). Settings > Art paintings filters by subject, age,
+  movement and painter (pick from famous ones or add any name), with "Highlights only" for the museum's best-known works.
 - **Built-in scenes**: no network at all.
+
+### Art screensaver
+
+Settings > Art paintings > Screensaver (or Settings > Art screensaver) shows the same paintings full screen as a
+framed picture with the title and painter, changing every 10 seconds to 15 minutes. Android starts it when idle once it
+is chosen under Settings > Device Preferences > Screen saver; "Make it the screensaver" does that over the TV's own ADB.
+Fire TV may not allow third-party screensavers.
 
 When a source has no art (no network, no key), the background chosen under "When Top Shelf art is unavailable" is
 shown.

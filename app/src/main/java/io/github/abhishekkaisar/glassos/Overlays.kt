@@ -35,6 +35,9 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
     private val shelfRow = RowView(context, "Top Shelf")
     private val contentRow = RowView(context, "Background titles")
     private val refreshRow = RowView(context, "Refresh hero catalog")
+    private val redditRow = RowView(context, "Reddit wallpapers")
+    private val artRow = RowView(context, "Art paintings")
+    private val saverRow = RowView(context, "Art screensaver")
     private val columnsRow = RowView(context, "Apps per row")
     private val insetRow = RowView(context, "Screen edge margin")
     private val gapRow = RowView(context, "App spacing")
@@ -68,6 +71,8 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
     }
     /** Replaces the settings list while open (Running apps). */
     private val running = RunningPage(act)
+    /** Replaces the settings list while open (Reddit wallpapers, Art paintings, Art screensaver). */
+    private val pages = PagesHost(act)
     private val thumbsRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
     private val thumbsScroll = HorizontalScrollView(context).apply {
         isHorizontalScrollBarEnabled = false
@@ -98,6 +103,10 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
             topMargin = dpi(12f); bottomMargin = dpi(14f)
         })
         running.visibility = View.GONE
+        panel.addView(pages, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
+            topMargin = dpi(12f); bottomMargin = dpi(14f)
+        })
+        pages.visibility = View.GONE
         if (android.os.Build.VERSION.SDK_INT >= 23) scroll.setOnScrollChangeListener { _, _, _, _, _ -> invalidateDeep(list) }
 
         val title = TextView(context).apply {
@@ -115,6 +124,9 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         list.addView(shelfRow, rowLp())
         list.addView(contentRow, rowLp())
         list.addView(refreshRow, rowLp())
+        list.addView(redditRow, rowLp())
+        list.addView(artRow, rowLp())
+        list.addView(saverRow, rowLp())
         for (row in listOf(columnsRow, insetRow, gapRow, sizeRow, destinationRow)) list.addView(row, rowLp())
         list.addView(keyRow, rowLp())
         list.addView(soundRow, rowLp())
@@ -160,6 +172,9 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         hiddenRow.onClick = { step(hiddenRow, SetupView.Step.HIDDEN) }
         permsRow.onClick = { step(permsRow, SetupView.Step.PERMISSIONS) }
         runningRow.onClick = { showRunning() }
+        redditRow.onClick = { showPages(redditRow, SourcePages.reddit()) }
+        artRow.onClick = { showPages(artRow, SourcePages.art()) }
+        saverRow.onClick = { showPages(saverRow, SourcePages.screensaver()) }
         homeAppRow.onClick = { step(homeAppRow, SetupView.Step.HOME) }
         setupRow.onClick = { resumeRow = setupRow; act.openSetup() }
         aboutRow.onClick = { step(aboutRow, SetupView.Step.ABOUT) }
@@ -241,7 +256,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         }
         fireSettingsRow.onClick = { close { act.openFireSettings() } }
         fireHomeRow.onClick = { close { act.openAmazonHome() } }
-        for (r in listOf(fireSettingsRow, fireHomeRow, photoRow, appsRow, setupRow, aboutRow)) { r.valueView.text = "›"; r.valueView.textSize = 24f }
+        for (r in listOf(fireSettingsRow, fireHomeRow, photoRow, appsRow, setupRow, aboutRow, saverRow)) { r.valueView.text = "›"; r.valueView.textSize = 24f }
         allRow.valueView.text = "›"
         editRow.valueView.text = "›"
         allRow.valueView.textSize = 24f
@@ -266,6 +281,8 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         nameRow.valueView.text = act.prefs.name.ifEmpty { "Not set" }
         countryRow.valueView.text = act.prefs.country.ifEmpty { "Not set" }.let { c -> if (c.length == 2) java.util.Locale("", c).displayCountry else c }
         shelfRow.valueView.text = HeroRepo.sourceLabel(act.prefs.topShelf)
+        redditRow.valueView.text = if (act.prefs.topShelf == HeroRepo.SRC_REDDIT) "In use" else "Set up"
+        artRow.valueView.text = if (act.prefs.topShelf == HeroRepo.SRC_ART) "In use" else "Set up"
         keyRow.valueView.text = when {
             act.prefs.tmdbKey.isNotEmpty() -> "Your key"
             BuildConfig.TMDB_API_KEY.isNotEmpty() -> "Built in"
@@ -344,7 +361,28 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
 
     /** Back: leaves Running apps first, then closes Settings. */
     fun back() {
-        if (running.visibility == View.VISIBLE) leaveRunning(focusRow = true) else close()
+        when {
+            pages.visibility == View.VISIBLE -> if (!pages.back()) leavePages(focusRow = true)
+            running.visibility == View.VISIBLE -> leaveRunning(focusRow = true)
+            else -> close()
+        }
+    }
+
+    private fun showPages(row: View, page: Page) {
+        resumeRow = row
+        scroll.visibility = View.GONE
+        pages.visibility = View.VISIBLE
+        pages.open(page)
+    }
+
+    /** Leaves the sub-pages: applies what changed (refetching the picture source) and returns to the list. */
+    private fun leavePages(focusRow: Boolean) {
+        if (pages.visibility != View.VISIBLE) return
+        pages.applyChanges()
+        pages.visibility = View.GONE
+        scroll.visibility = View.VISIBLE
+        val r = resumeRow
+        if (focusRow) { resumeRow = null; updateValues(); r?.requestFocus() }
     }
 
     private fun showRunning() {
@@ -366,6 +404,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         if (!isOpen) return
         isOpen = false
         leaveRunning(focusRow = false)
+        leavePages(focusRow = false)
         if (instant) {
             visibility = View.GONE
             act.onSettingsClosed()

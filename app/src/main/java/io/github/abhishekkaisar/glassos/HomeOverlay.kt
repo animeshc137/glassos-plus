@@ -78,6 +78,8 @@ object HomeOverlay {
                 WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.OPAQUE)
         lp.title = "GlassHome"
+        // Setup's text fields use the system keyboard; pan so the field stays above it.
+        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
         lp.windowAnimations = 0
         try {
             w.addView(s.root, lp)

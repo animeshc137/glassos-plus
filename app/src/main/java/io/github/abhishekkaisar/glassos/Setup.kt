@@ -7,15 +7,16 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.text.TextPaint
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
@@ -29,7 +30,7 @@ import java.util.Locale
 private const val REQ_HOME = 8
 
 /**
- * First-run setup in a centred glass panel over the Top Shelf, driven with the D-pad: name (on-screen keyboard),
+ * First-run setup in a centred glass panel over the Top Shelf, driven with the D-pad: name (system keyboard),
  * profile photo, country, the apps on the top row, and one-tap permissions over the TV's own ADB. Single steps
  * also open from Settings ([open] with single = true).
  */
@@ -114,6 +115,7 @@ class SetupView(private val home: HomeScreen) : FrameLayout(home.ctx) {
     private fun close() {
         if (!isOpen) return
         isOpen = false
+        hideKeyboard()
         animate().alpha(0f).setDuration(180).withEndAction {
             visibility = View.GONE
             body.removeAllViews(); nav.removeAllViews()
@@ -162,6 +164,7 @@ class SetupView(private val home: HomeScreen) : FrameLayout(home.ctx) {
 
     private fun show(s: Step) {
         step = s
+        hideKeyboard()
         // Steps with a scrolling list clip to the body, or the list draws over the buttons; the others leave room
         // for focus scaling.
         body.clipChildren = s == Step.COUNTRY || s == Step.APPS || s == Step.HIDDEN
@@ -218,47 +221,49 @@ class SetupView(private val home: HomeScreen) : FrameLayout(home.ctx) {
     private fun nameStep() {
         title.text = "What is your name?"
         subtitle.text = "Shown on your profile in Control Center."
-        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; clipChildren = false; clipToPadding = false }
-        val field = Field(context, "Your name")
-        field.value = name
-        box.addView(field, LinearLayout.LayoutParams(dpi(420f), dpi(46f)))
-        val kb = Keyboard(context, digits = false) { k ->
-            name = edit(name, k, 24)
-            field.value = name
-        }
-        box.addView(kb, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dpi(12f) })
-        body.addView(box, LayoutParams(-1, -2, Gravity.CENTER))
-        if (!single) navButton("Back") { back() }
+        val backBtn = if (!single) navButton("Back") { back() } else null
         val go = navButton(continueLabel(), primary = true) { next() }
-        kb.firstKey()?.requestFocus()
-        kb.downTo(go)
+        textStep(TextInput(context, "Your name", 24, TextInput.Kind.NAME).apply { setText(name) }, dpi(420f), { name = it },
+            "Press OK to type with the on-screen keyboard, or type on your phone with the Android TV remote app.", go, listOfNotNull(backBtn, go))
+    }
+
+    /**
+     * A step that edits one line of text with the system keyboard: a real [TextInput] takes the focus, the keyboard
+     * opens, and what is typed on the TV (or sent from the Android TV remote app on a phone) goes straight to [onText].
+     * The keyboard's Done key hides it and moves to [done].
+     */
+    private fun textStep(field: TextInput, width: Int, onText: (String) -> Unit, hint: String, done: View, buttons: List<View>) {
+        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; clipChildren = false; clipToPadding = false }
+        field.id = View.generateViewId()
+        field.addTextChangedListener(object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) { onText(s?.toString() ?: "") }
+            override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+            override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+        })
+        field.onDone = { hideKeyboard(); done.requestFocus() }
+        box.addView(field, LinearLayout.LayoutParams(width, dpi(46f)))
+        box.addView(text(hint, 14f, 0x99FFFFFF.toInt()).apply { gravity = Gravity.CENTER },
+            LinearLayout.LayoutParams(width, -2).apply { topMargin = dpi(14f) })
+        body.addView(box, LayoutParams(-1, -2, Gravity.CENTER))
+        field.nextFocusDownId = done.id
+        buttons.forEach { it.nextFocusUpId = field.id }
+        field.setSelection(field.text.length)
+        field.requestFocus()
+        field.showKeyboardSoon()
+    }
+
+    private fun hideKeyboard() {
+        val t = windowToken ?: return
+        try { (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(t, 0) } catch (e: Throwable) { }
     }
 
     private fun keyStep() {
         title.text = "TMDB API key"
         subtitle.text = "Your TMDB API key (v3) or read access token. Leave it empty for the built-in key."
-        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; clipChildren = false; clipToPadding = false }
-        val field = Field(context, "API key")
-        field.value = keyText
-        field.small = true
-        box.addView(field, LinearLayout.LayoutParams(dpi(520f), dpi(46f)))
-        val kb = Keyboard(context, digits = true, capitalise = false) { k ->
-            keyText = edit(keyText, k, 400, allowSpace = false)
-            field.value = keyText
-        }
-        box.addView(kb, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dpi(12f) })
-        body.addView(box, LayoutParams(-1, -2, Gravity.CENTER))
-        navButton("Cancel") { back() }
+        val cancel = navButton("Cancel") { back() }
         val go = navButton("Save", primary = true) { next() }
-        kb.firstKey()?.requestFocus()
-        kb.downTo(go)
-    }
-
-    private fun edit(cur: String, k: String, max: Int, allowSpace: Boolean = true): String = when (k) {
-        Keyboard.DEL -> cur.dropLast(1)
-        Keyboard.CLEAR -> ""
-        " " -> if (allowSpace && cur.isNotEmpty() && !cur.endsWith(" ")) (cur + " ").take(max) else cur
-        else -> (cur + k).take(max)
+        textStep(TextInput(context, "API key", 400, TextInput.Kind.KEY).apply { setText(keyText) }, dpi(520f), { keyText = it },
+            "Press OK to type or paste, or type on your phone with the Android TV remote app.", go, listOf(cancel, go))
     }
 
     private fun photoStep() {
@@ -718,31 +723,6 @@ class SetupView(private val home: HomeScreen) : FrameLayout(home.ctx) {
         }
     }
 
-    /** A glass text field showing [value] with a caret, or [hint] when empty. */
-    private class Field(ctx: Context, private val hint: String) : View(ctx) {
-        var value = ""
-            set(v) { field = v; invalidate() }
-        var small = false
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val rect = RectF()
-        private val t = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Fonts.regular; color = Color.WHITE }
-        override fun onDraw(c: Canvas) {
-            rect.set(0f, 0f, width.toFloat(), height.toFloat())
-            fill.color = 0x26FFFFFF
-            c.drawRoundRect(rect, height / 2f, height / 2f, fill)
-            t.textSize = dp(if (small) 15f else 22f)
-            val pad = dp(22f)
-            val empty = value.isEmpty()
-            t.color = if (empty) 0x80FFFFFF.toInt() else Color.WHITE
-            var s = if (empty) hint else value
-            // Long values (API keys) show their end, where typing happens.
-            while (!empty && t.measureText("$s|") > width - 2 * pad && s.length > 1) s = s.substring(1)
-            val y = height / 2f - (t.ascent() + t.descent()) / 2
-            c.drawText(s, pad, y, t)
-            if (!empty) { t.color = 0xCCFFFFFF.toInt(); c.drawText("|", pad + t.measureText(s) + dp(1f), y, t) }
-        }
-    }
-
     /** The round avatar preview: the photo, or the glass silhouette. */
     private class AvatarPreview(ctx: Context, private val size: Int) : View(ctx) {
         var bitmap: Bitmap? = null
@@ -761,87 +741,5 @@ class SetupView(private val home: HomeScreen) : FrameLayout(home.ctx) {
             p.shader = sh
             c.drawCircle(r, r, r, p)
         }
-    }
-}
-
-/**
- * On-screen keyboard for the D-pad: letters (with Shift), optionally digits, space, delete and clear. Each key
- * turns white with dark text when focused, like the other glass buttons.
- */
-class Keyboard(ctx: Context, digits: Boolean, private val capitalise: Boolean = true, private val onKey: (String) -> Unit) : LinearLayout(ctx) {
-    private var shift = capitalise
-    private val letterKeys = ArrayList<Key>()
-    private val rows = ArrayList<List<Key>>()
-
-    init {
-        orientation = VERTICAL
-        clipChildren = false
-        clipToPadding = false
-        val lines = ArrayList<List<String>>()
-        lines.add("abcdefghijklm".map { it.toString() })
-        lines.add("nopqrstuvwxyz".map { it.toString() })
-        lines.add(if (digits) "1234567890-_.".map { it.toString() } else "1234567890-.'".map { it.toString() })
-        for (l in lines) addRow(l.map { k -> Key(context, k, 1).also { if (k[0].isLetter()) letterKeys.add(it) } })
-        addRow(listOf(Key(context, SHIFT, 2), Key(context, " ", 5, "space"), Key(context, DEL, 3, "delete"), Key(context, CLEAR, 3, "clear")))
-        updateCase()
-    }
-
-    private fun addRow(keys: List<Key>) {
-        val row = LinearLayout(context).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER; clipChildren = false; clipToPadding = false }
-        keys.forEachIndexed { i, k ->
-            k.id = View.generateViewId()
-            k.onClick = { press(k) }
-            row.addView(k, LayoutParams(k.w, dpi(KEY), 0f).apply { if (i > 0) leftMargin = dpi(GAP) })
-        }
-        addView(row, LayoutParams(-2, -2).apply { if (rows.isNotEmpty()) topMargin = dpi(GAP) })
-        rows.add(keys)
-    }
-
-    private fun press(k: Key) {
-        when (k.value) {
-            SHIFT -> { shift = !shift; updateCase(); return }
-            else -> onKey(if (k.value.length == 1 && k.value[0].isLetter() && shift) k.value.uppercase() else k.value)
-        }
-        if (shift && k.value.length == 1 && k.value[0].isLetter()) { shift = false; updateCase() }
-        if (k.value == " " && capitalise) { shift = true; updateCase() }
-    }
-
-    private fun updateCase() { letterKeys.forEach { it.label = if (shift) it.value.uppercase() else it.value } }
-
-    fun firstKey(): View? = rows.firstOrNull()?.firstOrNull()
-
-    /** Down from the last row moves to [v] (the Continue button). */
-    fun downTo(v: View) { rows.lastOrNull()?.forEach { it.nextFocusDownId = v.id }; v.nextFocusUpId = rows.last()[1].id }
-
-    class Key(ctx: Context, val value: String, units: Int, display: String? = null) : View(ctx) {
-        val w = ctx.dpi(KEY * units + GAP * (units - 1))
-        var label = display ?: if (value == SHIFT) "shift" else value
-            set(v) { field = v; invalidate() }
-        var onClick: (() -> Unit)? = null
-        private val focus = FocusAnim(this, 1.12f) { invalidate() }
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
-        private val rect = RectF()
-        private val t = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Fonts.medium; textAlign = Paint.Align.CENTER }
-        init { isFocusable = true; isClickable = true; setOnClickListener { onClick?.invoke() } }
-        override fun onFocusChanged(gained: Boolean, direction: Int, previous: Rect?) {
-            super.onFocusChanged(gained, direction, previous); focus.set(gained)
-        }
-        override fun onDraw(c: Canvas) {
-            val f = focus.amount
-            rect.set(0f, 0f, width.toFloat(), height.toFloat())
-            fill.color = alphaOf(Color.WHITE, 0.12f + 0.85f * f)
-            c.drawRoundRect(rect, dp(10f), dp(10f), fill)
-            t.textSize = dp(if (label.length > 1) 13f else 19f)
-            t.color = lerpColor(Color.WHITE, 0xFF1C1C1E.toInt(), f)
-            c.drawText(label, width / 2f, height / 2f - (t.ascent() + t.descent()) / 2, t)
-        }
-    }
-
-    companion object {
-        const val SHIFT = "\u0001shift"
-        const val DEL = "\u0001del"
-        const val CLEAR = "\u0001clear"
-        private const val KEY = 36f
-        private const val GAP = 5f
     }
 }

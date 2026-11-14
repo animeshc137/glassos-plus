@@ -55,10 +55,23 @@ object HeroRepo {
     const val SRC_CINEMETA = "cinemeta"
     const val SRC_APPLE = "apple"
     const val SRC_SCENES = "scenes"
-    val SOURCES = listOf(SRC_CINEMETA to "Movies & series (Cinemeta)", SRC_TMDB to "TMDB", SRC_APPLE to "Apple TV (unofficial)", SRC_SCENES to "Built-in scenes")
+    /** Wallpapers from subreddits (see [RedditRepo]) and museum paintings (see [ArtRepo]); both are plain images, no titles. */
+    const val SRC_REDDIT = "reddit"
+    const val SRC_ART = "art"
+    val SOURCES = listOf(SRC_CINEMETA to "Movies & series (Cinemeta)", SRC_TMDB to "TMDB", SRC_APPLE to "Apple TV (unofficial)",
+        SRC_REDDIT to "Reddit wallpapers", SRC_ART to "Art (museum paintings)", SRC_SCENES to "Built-in scenes")
     fun sourceLabel(id: String) = SOURCES.firstOrNull { it.first == id }?.second ?: id
 
     private const val REFRESH_MS = 6 * 3600_000L
+    /** How long a source's cache stays fresh: Reddit and Art follow their own setting, the rest 6 hours. */
+    private fun refreshMs(ctx: Context, src: String): Long = when (src) {
+        SRC_REDDIT -> Prefs(ctx).redditRefreshHours.coerceAtLeast(1) * 3600_000L
+        SRC_ART -> Prefs(ctx).artRefreshHours.coerceAtLeast(1) * 3600_000L
+        else -> REFRESH_MS
+    }
+
+    /** What the last [refresh] of each source found, for the Settings pages ("14 images", "Could not reach reddit.com"). */
+    val lastResult = java.util.concurrent.ConcurrentHashMap<String, String>()
     private const val RETRY_MS = 30 * 60_000L
     private const val MAX_TITLES = 8
     /** Unofficial: the US storefront of the tv.apple.com web app. It may stop working at any time. */
@@ -109,7 +122,7 @@ object HeroRepo {
                 val art = File(o.getString("art"))
                 if (!art.exists()) return@mapNotNull null
                 Slide(
-                    key = "t:" + o.getString("id"), kind = Slide.TITLE, art = art,
+                    key = "t:" + o.getString("id"), kind = o.optInt("kind", Slide.TITLE), art = art,
                     title = o.optString("title"), subtitle = o.optString("subtitle"),
                     url = o.optString("url").ifEmpty { null },
                     logo = o.optString("logo").ifEmpty { null }?.let { File(it) }?.takeIf { it.exists() },
@@ -126,7 +139,7 @@ object HeroRepo {
         val attempt = File(d, "attempt").lastModified()
         val now = System.currentTimeMillis()
         val upgraded = src != SRC_CINEMETA || File(d, "catalog-v3").exists()
-        if (upgraded && f.exists() && now - f.lastModified() < REFRESH_MS) return false
+        if (upgraded && f.exists() && now - f.lastModified() < refreshMs(ctx, src)) return false
         return now - attempt >= RETRY_MS
     }
 
@@ -138,6 +151,7 @@ object HeroRepo {
     }
 
     /** Fetches [src]'s current titles and their art. Returns true when the cache changed. Call off the UI thread. */
+    @Synchronized
     fun refresh(ctx: Context, src: String): Boolean {
         if (src == SRC_SCENES) return false
         val d = dir(ctx, src)
@@ -145,9 +159,15 @@ object HeroRepo {
         val items = when (src) {
             SRC_CINEMETA -> Cinemeta.fetch(Prefs(ctx).catalogContent, cachedTitles(ctx, src).map { it.key.removePrefix("t:") }.toSet())
             SRC_TMDB -> Tmdb.fetch(ctx)
+            SRC_REDDIT -> RedditRepo.fetch(Prefs(ctx))
+            SRC_ART -> ArtRepo.fetch(Prefs(ctx))
             else -> appleItems(d) ?: return false
         }
         val changed = store(d, items, if (src == SRC_APPLE) "us" else Prefs(ctx).country)
+        if (src == SRC_REDDIT || src == SRC_ART) {
+            // The fetchers say why they found nothing (offline, blocked, filters too strict) in lastResult.
+            lastResult[src] = if (changed) "${cachedTitles(ctx, src).size} images" else lastResult[src] ?: "Nothing found"
+        }
         if (changed && src == SRC_CINEMETA) {
             File(d, "catalog-v3").writeText("3")
             android.util.Log.i("GlassCatalog", "Cinemeta cached titles: ${cachedTitles(ctx, src).size}")
@@ -184,7 +204,7 @@ object HeroRepo {
         for (it in items) {
             val base = it.id.replace(Regex("[^A-Za-z0-9.]"), "_")
             val art = File(d, if (it.id.startsWith("cinemeta_")) "${base}_hq.jpg" else "$base.jpg")
-            if (!art.exists() && !download(it.art, art)) continue
+            if (!art.exists() && !downloadArt(it.art, art)) continue
             keep.add(art.name)
             var logo: File? = null
             if (it.logo != null) {
@@ -193,7 +213,7 @@ object HeroRepo {
             }
             out.put(JSONObject().apply {
                 put("id", it.id); put("title", it.title); put("subtitle", it.subtitle)
-                put("url", it.url); put("art", art.path); put("logo", logo?.path ?: ""); put("pkg", it.pkg ?: "")
+                put("url", it.url); put("art", art.path); put("logo", logo?.path ?: ""); put("pkg", it.pkg ?: ""); put("kind", it.kind)
             })
         }
         if (out.length() == 0) return false
@@ -208,7 +228,9 @@ object HeroRepo {
     private fun canvasUrl(sf: String, locale: String, utsk: String) =
         "https://uts-api.itunes.apple.com/uts/v3/canvases/Roots/watchNow?caller=web&locale=$locale&pfm=web&sf=$sf&v=100&utsk=$utsk"
 
-    class Item(val id: String, val title: String, val subtitle: String, val url: String, val art: String, val logo: String?, val pkg: String? = null)
+    class Item(val id: String, val title: String, val subtitle: String, val url: String, val art: String, val logo: String?, val pkg: String? = null,
+        /** [Slide.TITLE] (title, logo, Open) or [Slide.PHOTO] (just the picture, with a slow zoom). */
+        val kind: Int = Slide.TITLE)
 
     private fun fill(template: String, w: Int, h: Int, c: String, f: String) =
         template.replace("{w}", w.toString()).replace("{h}", h.toString()).replace("{c}", c).replace("{f}", f)
@@ -251,9 +273,13 @@ object HeroRepo {
         return Regex("\"utsk\":\"([^\"]+)\"").find(body)?.groupValues?.get(1)
     }
 
+    /** Reddit and the museum APIs ask clients to say who they are; a generic Java agent gets refused. */
+    const val USER_AGENT = "android:io.github.abhishekkaisar.glassos:1.0 (TV launcher wallpaper fetch)"
+
     private fun open(url: String): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
         if (!url.contains("apple.com")) {
             connectTimeout = 10_000; readTimeout = 20_000
+            setRequestProperty("User-Agent", USER_AGENT)
             return@apply
         }
         connectTimeout = 10_000
@@ -283,6 +309,33 @@ object HeroRepo {
             }
         } finally { c.disconnect() }
     } catch (e: Throwable) { false }
+
+    /** [download] for wallpapers: pictures wider than [MAX_ART_W] (Reddit has 8K ones) are shrunk to keep the cache small. */
+    private fun downloadArt(url: String, to: File): Boolean {
+        if (!download(url, to)) return false
+        shrink(to)
+        return true
+    }
+
+    private const val MAX_ART_W = 2560
+
+    private fun shrink(f: File) {
+        try {
+            if (f.length() < 1_200_000L) return
+            val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(f.path, o)
+            if (o.outWidth <= MAX_ART_W) return
+            var sample = 1
+            while (o.outWidth / (sample * 2) >= MAX_ART_W) sample *= 2
+            val src = BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return
+            val out = if (src.width > MAX_ART_W) Bitmap.createScaledBitmap(src, MAX_ART_W, (src.height.toLong() * MAX_ART_W / src.width).toInt().coerceAtLeast(1), true) else src
+            val tmp = File(f.path + ".tmp")
+            tmp.outputStream().use { out.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+            tmp.renameTo(f)
+            if (out !== src) src.recycle()
+            out.recycle()
+        } catch (e: Throwable) { }
+    }
 
     /** The user's own photos as slides. */
     fun photoSlides(ctx: Context, canRead: Boolean): List<Slide> = localImages(ctx, canRead).map {
