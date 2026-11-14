@@ -300,10 +300,13 @@ class TileView(ctx: Context, val cardW: Int, val cardH: Int, private val labelH:
         c.drawRoundRect(hs, hs, w - hs, h - hs, radius - hs, radius - hs, rim)
 
         if (badge) {
-            val r = dp(9f)
-            val cx = w - dp(4f)
-            val cy = dp(4f)
-            fill.color = 0xFF0A84FF.toInt()
+            // Marked for uninstall: the art dims and a red check sits in the corner.
+            fill.color = 0x66000000
+            c.drawRoundRect(card, radius, radius, fill)
+            val r = dp(13f)
+            val cx = w - dp(16f)
+            val cy = dp(16f)
+            fill.color = 0xFFFF453A.toInt()
             c.drawCircle(cx, cy, r, fill)
             val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = dp(1.8f); color = Color.WHITE }
             val p = Path()
@@ -450,6 +453,77 @@ class UserPill(ctx: Context) : View(ctx) {
         ring.strokeWidth = dp(0.6f)
         ring.color = 0x33FFFFFF
         c.drawCircle(cx, cy, av / 2 - ring.strokeWidth / 2, ring)
+        if (f > 0.01f) {
+            ring.strokeWidth = dp(1.2f)
+            ring.color = alphaOf(Color.WHITE, 0.85f * f)
+            val hs = ring.strokeWidth / 2
+            c.drawRoundRect(hs, hs, width - hs, height - hs, r - hs, r - hs, ring)
+        }
+    }
+}
+
+/** A glass capsule with a text label in the top bar, next to [UserPill]. OK clicks it. */
+class PillButton(ctx: Context) : View(ctx) {
+    var onClick: (() -> Unit)? = null
+    var label = ""
+        set(v) { if (v != field) { field = v; requestLayout(); invalidate() } }
+    /** Tints the capsule red while it holds apps to uninstall. */
+    var alert = false
+        set(v) { if (v != field) { field = v; invalidate() } }
+
+    private val glass = GlassPainter().apply {
+        tint = 0.20f; tintColor = 0xFFFFF4E8.toInt(); sheen = 0.10f; highlight = 0.40f; border = 0.14f; stroke = ctx.dp(0.6f)
+    }
+    private val focus = FocusAnim(this, 1.08f) { invalidate() }
+    private val rect = RectF()
+    private val gp = Paint()
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val labelText = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Fonts.medium; textSize = ctx.dp(13f); color = Color.WHITE
+        setShadowLayer(ctx.dp(3f), 0f, ctx.dp(0.5f), alphaOf(Color.BLACK, 0.3f))
+    }
+    private val h = ctx.dpi(29f)
+    private val padH = ctx.dp(14f)
+
+    init {
+        isFocusable = true
+        isClickable = true
+        outlineProvider = null
+        setOnClickListener { onClick?.invoke() }
+    }
+
+    override fun onMeasure(w: Int, hs: Int) {
+        setMeasuredDimension(Math.ceil((padH * 2 + labelText.measureText(label)).toDouble()).toInt(), h)
+    }
+
+    override fun onSizeChanged(w: Int, hh: Int, ow: Int, oh: Int) {
+        pivotX = w / 2f
+        pivotY = hh / 2f
+    }
+
+    override fun onFocusChanged(gained: Boolean, direction: Int, previous: Rect?) {
+        super.onFocusChanged(gained, direction, previous)
+        focus.set(gained)
+    }
+
+    override fun onDraw(c: Canvas) {
+        val f = focus.amount
+        val r = height / 2f
+        rect.set(0f, 0f, width.toFloat(), height.toFloat())
+        GlowCache.draw(c, rect.width(), rect.height(), r, dp(8f), Color.BLACK, 0.22f + 0.2f * f, dp(3f), gp)
+        GlowCache.draw(c, rect.width(), rect.height(), r, dp(10f), Color.WHITE, 0.28f * f, 0f, gp)
+        val g = Tone.pillGlass(Tone.pill)
+        glass.tint = g.tint + 0.15f * f
+        glass.dark = g.dark
+        glass.highlight = 0.40f - 0.18f * g.t
+        glass.border = 0.14f - 0.06f * g.t
+        glass.draw(c, this, rect, r)
+        if (alert) {
+            fill.color = alphaOf(0xFFFF453A.toInt(), 0.62f)
+            c.drawRoundRect(rect, r, r, fill)
+        }
+        c.drawText(label, padH, height / 2f - (labelText.ascent() + labelText.descent()) / 2, labelText)
         if (f > 0.01f) {
             ring.strokeWidth = dp(1.2f)
             ring.color = alphaOf(Color.WHITE, 0.85f * f)

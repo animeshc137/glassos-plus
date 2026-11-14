@@ -16,7 +16,8 @@ mkdir -p tests/classes
   app/src/main/java/io/github/abhishekkaisar/glassos/HeroCatalogSelection.java \
   app/src/main/java/io/github/abhishekkaisar/glassos/HomeRedirectPolicy.java \
   app/src/main/java/io/github/abhishekkaisar/glassos/ContinueLogic.java \
-  app/src/main/java/io/github/abhishekkaisar/glassos/DirectHomeKeyPolicy.java tests/PersonalizationCheck.java
+  app/src/main/java/io/github/abhishekkaisar/glassos/DirectHomeKeyPolicy.java \
+  app/src/main/java/io/github/abhishekkaisar/glassos/RunningParse.java tests/PersonalizationCheck.java
 "$JAVA_HOME/bin/java" -cp tests/classes PersonalizationCheck
 ./gradlew --no-daemon assembleDebug lint
 python3 - <<'PY'
