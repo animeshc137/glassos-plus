@@ -44,6 +44,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
     private val appsRow = RowView(context, "Top row apps")
     private val hiddenRow = RowView(context, "Hidden apps")
     private val permsRow = RowView(context, "Permissions")
+    private val runningRow = RowView(context, "Running apps")
     private val setupRow = RowView(context, "Run setup again")
     private val aboutRow = RowView(context, "About")
     private val uninstallRow = RowView(context, "Prepare to uninstall")
@@ -65,6 +66,8 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         overScrollMode = View.OVER_SCROLL_NEVER
         isSmoothScrollingEnabled = true
     }
+    /** Replaces the settings list while open (Running apps). */
+    private val running = RunningPage(act)
     private val thumbsRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; clipChildren = false; clipToPadding = false }
     private val thumbsScroll = HorizontalScrollView(context).apply {
         isHorizontalScrollBarEnabled = false
@@ -91,6 +94,10 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         panel.addView(scroll, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
             topMargin = dpi(12f); bottomMargin = dpi(14f)
         })
+        panel.addView(running, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
+            topMargin = dpi(12f); bottomMargin = dpi(14f)
+        })
+        running.visibility = View.GONE
         if (android.os.Build.VERSION.SDK_INT >= 23) scroll.setOnScrollChangeListener { _, _, _, _, _ -> invalidateDeep(list) }
 
         val title = TextView(context).apply {
@@ -135,6 +142,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         list.addView(fastHomeRow, rowLp())
         list.addView(directHomeRow, rowLp())
         list.addView(continueRow, rowLp())
+        list.addView(runningRow, rowLp())
         list.addView(permsRow, rowLp())
         if (!Platform.isFireTv(context)) list.addView(homeAppRow, rowLp())
         list.addView(fireSettingsRow, rowLp())
@@ -151,6 +159,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         appsRow.onClick = { step(appsRow, SetupView.Step.APPS) }
         hiddenRow.onClick = { step(hiddenRow, SetupView.Step.HIDDEN) }
         permsRow.onClick = { step(permsRow, SetupView.Step.PERMISSIONS) }
+        runningRow.onClick = { showRunning() }
         homeAppRow.onClick = { step(homeAppRow, SetupView.Step.HOME) }
         setupRow.onClick = { resumeRow = setupRow; act.openSetup() }
         aboutRow.onClick = { step(aboutRow, SetupView.Step.ABOUT) }
@@ -263,6 +272,7 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
             else -> "Not set"
         }
         permsRow.valueView.text = "${Grants.ALL.count { it.isGranted(context) }} of ${Grants.ALL.size}"
+        runningRow.valueView.text = Running.memory()?.let { "${Running.mb(it.first)} MB free" } ?: "›"
         bgRow.valueView.text = WallpaperStore.label(act.prefs.scene)
         replaceRow.valueView.text = if (act.prefs.replaceHome) "On" else "Off"
         homeAppRow.valueView.text = if (Platform.isDefaultHome(context)) "GlassOS" else "Not GlassOS"
@@ -332,9 +342,30 @@ class SettingsView(private val act: HomeScreen) : FrameLayout(act.ctx) {
         focusStart()
     }
 
+    /** Back: leaves Running apps first, then closes Settings. */
+    fun back() {
+        if (running.visibility == View.VISIBLE) leaveRunning(focusRow = true) else close()
+    }
+
+    private fun showRunning() {
+        resumeRow = runningRow
+        scroll.visibility = View.GONE
+        running.visibility = View.VISIBLE
+        running.open()
+    }
+
+    private fun leaveRunning(focusRow: Boolean) {
+        running.reset()
+        if (resumeRow === runningRow) resumeRow = null
+        running.visibility = View.GONE
+        scroll.visibility = View.VISIBLE
+        if (focusRow) { updateValues(); runningRow.requestFocus() }
+    }
+
     fun close(instant: Boolean = false, after: (() -> Unit)? = null) {
         if (!isOpen) return
         isOpen = false
+        leaveRunning(focusRow = false)
         if (instant) {
             visibility = View.GONE
             act.onSettingsClosed()

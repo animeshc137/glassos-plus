@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.Set;
 import io.github.abhishekkaisar.glassos.personal.DirectHomeKeyPolicy;
 import io.github.abhishekkaisar.glassos.personal.ContinueLogic;
+import io.github.abhishekkaisar.glassos.personal.RunningParse;
 
 /** Runs with the existing JDK; no Android device or new test dependency required. */
 public final class PersonalizationCheck {
@@ -113,6 +114,40 @@ public final class PersonalizationCheck {
         require(TitleLinks.build(TitleLinks.NUVIO, "movie", "tt1375666/../../other") == null, "Malformed id accepted");
         require(TitleLinks.build(TitleLinks.NUVIO, "other", "tt1375666") == null, "Unsupported type accepted");
         require(TitleLinks.build("com.netflix.ninja", "movie", "tt1375666") == null, "Wrong app fallback");
+        runningParseChecks();
         System.out.println("Passed: " + layouts + " layout combinations and exact movie/series link checks.");
+    }
+
+    /** Real `dumpsys` shapes from an Android 9 TV (trimmed). */
+    private static void runningParseChecks() {
+        String mem = "Applications Memory Usage (in Kilobytes):\nUptime: 1 Realtime: 1\n\nTotal PSS by process:\n"
+            + "    117,339K: com.google.android.gms (pid 3849)\n"
+            + "     65,591K: io.github.abhishekkaisar.glassos.personal (pid 11894 / activities)\n"
+            + "     54,791K: system (pid 3412)\n"
+            + "     54,380K: com.android.vending (pid 11793)\n"
+            + "     37,316K: com.android.vending:background (pid 12001)\n\n"
+            + "Total PSS by OOM adjustment:\n    123,456K: Native\n       10K: com.never.counted (pid 1)\n";
+        String svc = "ACTIVITY MANAGER SERVICES (dumpsys activity services)\n"
+            + "  * ServiceRecord{835fe9b u0 com.google.android.gms/.play.integrity.api.service.IntegrityApiPersistentService}\n"
+            + "    isForeground=false\n"
+            + "  * ServiceRecord{36805ad u0 com.google.android.tv.remote.service/.DiscoveryService}\n"
+            + "    isForeground=true foregroundId=8765 foregroundNoti=Notification(channel=atv_remote_service)\n"
+            + "  * ServiceRecord{8606eca u0 com.vasmarfas.UniversalAmbientLight/.common.ScreenGrabberService}\n"
+            + "    isForeground=true foregroundId=1\n"
+            + "  * ServiceRecord{a1b2c3d u0 com.vasmarfas.UniversalAmbientLight/.Other}\n"
+            + "  * ServiceRecord{d4e5f60 u10 other.user/.Svc}\n";
+        java.util.Map<String, RunningParse.Usage> u = RunningParse.parse(mem, svc);
+        require(u.get("com.android.vending").pssKb == 91696L, "Process figures of one package are summed");
+        require(u.get("com.google.android.gms").pssKb == 117339L && u.get("com.google.android.gms").services == 1, "Package with one service");
+        require(u.get("io.github.abhishekkaisar.glassos.personal").hasActivity, "Foreground app detected");
+        require(!u.get("com.android.vending").hasActivity, "Background app is not foreground");
+        require(u.get("com.google.android.tv.remote.service").foregroundServices == 1, "Foreground service counted");
+        require(u.get("com.vasmarfas.UniversalAmbientLight").services == 2 && u.get("com.vasmarfas.UniversalAmbientLight").foregroundServices == 1, "Services counted per package");
+        require(!u.containsKey("other.user"), "Other users' services leaked in");
+        require(!u.containsKey("com.never.counted"), "Read past the process section");
+        require(u.containsKey("system"), "Non-package processes are kept for the caller to filter");
+        require(RunningParse.packageOf("com.android.vending:background").equals("com.android.vending"), "Process suffix");
+        require(RunningParse.isPackageName("com.netflix.ninja") && RunningParse.isPackageName("tv.nekko.to"), "Real package names");
+        require(!RunningParse.isPackageName("system") && !RunningParse.isPackageName("com.x; reboot") && !RunningParse.isPackageName("com.x$(id)") && !RunningParse.isPackageName(null), "Unsafe name accepted");
     }
 }

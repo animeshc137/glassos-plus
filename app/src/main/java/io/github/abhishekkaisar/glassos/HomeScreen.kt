@@ -974,6 +974,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             heading = app.label
             items.add("Move" to { val tile = tileOf(pkg); if (tile != null) startMove(tile) })
             items.add("Uninstall" to { uninstall(listOf(pkg)) })
+            items.add("App info" to { openAppInfo(pkg) })
             if (ctx is Activity) items.add("Select multiple to uninstall" to { enterSelect(pkg) })
             items.add((if (pkg in dockPkgs) "Remove from top row" else "Add to top row") to { toggleDock(pkg) })
             items.add("Hide app" to { hideApp(pkg) })
@@ -989,6 +990,15 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
             updateHeroRunning()
         }
         updateHeroRunning()
+    }
+
+    /**
+     * The system's page for one app (Force stop, Uninstall, Clear data, Clear cache, permissions). Where the TV has
+     * no such page, its Settings grid opens instead, with a hint to choose Apps.
+     */
+    private fun openAppInfo(pkg: String) {
+        val i = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$pkg"))
+        startIntent(i, Platform.handler(ctx, i), "Choose Apps, then ${labelOf(pkg)}")
     }
 
     /** The top button: starts select mode; with apps marked it uninstalls them; with none marked it cancels. */
@@ -1550,7 +1560,7 @@ class HomeScreen(val ctx: Context, private val host: HomeHost, seed: HomeScreen?
         when {
             setup.isOpen -> setup.back()
             cc.isOpen -> cc.back()
-            settings.isOpen -> settings.close()
+            settings.isOpen -> settings.back()
             appMenu.isOpen -> appMenu.close()
             movingPkg != null -> cancelMove()
             selectMode -> exitSelect()
